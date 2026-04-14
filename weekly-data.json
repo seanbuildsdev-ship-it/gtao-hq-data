@@ -1,0 +1,42 @@
+{
+  "_updated": "2026-04-14",
+  "weekLabel": "APR 9 – 15",
+  "challenge": {},
+  "bonuses": [],
+  "newVehicles": [],
+  "discounts": [
+    {
+      "pct": 40,
+      "category": "ness Discounts All Bail Offices",
+      "until": "",
+      "items": []
+    },
+    {
+      "pct": 35,
+      "category": "Vehicles",
+      "until": "",
+      "items": []
+    },
+    {
+      "pct": 30,
+      "category": "Vehicles",
+      "until": "",
+      "items": []
+    }
+  ],
+  "podium": "Pfister Growler",
+  "prizeRide": "Challenge",
+  "salvage": [],
+  "gunVan": [],
+  "fibFile": "Project Breakaway File",
+  "mostWanted": [],
+  "carMeet": {
+    "prizeRide": "",
+    "prizeReq": "",
+    "premiumTest": "",
+    "premiumTestNote": "",
+    "testRides": [],
+    "luxuryAutos": [],
+    "pdm": []
+  }
+}
