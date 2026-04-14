@@ -19,7 +19,7 @@ jobs:
         run: pip install requests beautifulsoup4
       - name: Run scraper
         run: python scraper.py
-- name: Commit updated JSON
+      - name: Commit updated JSON
         run: |
           git config user.name  "gtao-hq-bot"
           git config user.email "bot@gtao-hq"
