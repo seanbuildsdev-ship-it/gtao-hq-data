@@ -154,28 +154,30 @@ def parse(html):
                 data['challenge']['reward'] = clean(lines[1])
 
     # ── Bonus Money ──────────────────────────────────────────────────
-    # Each tier is extracted from its own section — stops at next heading
+    # Each tier extracted from its own section — stops cleanly at next heading.
+    # mult is the SECTION multiplier (the heading says Double/Triple/Quadruple).
+    # We use ONLY the section multiplier — we never override it based on note text.
     for mult, pattern in [
-        (4, r'quadruple.*(?:money|bonus)'),
-        (3, r'triple.*(?:money|bonus)'),
-        (2, r'double.*(?:money|bonus)'),
+        (4, r'quadruple.*(?:money|bonus|reward)'),
+        (3, r'triple.*(?:money|bonus|reward)'),
+        (2, r'double.*(?:money|bonus|reward)'),
     ]:
         bullets = get_section_bullets(soup, pattern)
         if not bullets:
-            # Some sites use plain paragraphs instead of lists
             body = get_section_text(soup, pattern)
             bullets = [l.strip().lstrip('-•* ') for l in body.split('\n')
                       if l.strip() and re.match(r'^[-•*]', l.strip())]
 
         for b in bullets:
             b = b.replace('**', '').strip()
-            # Name = text before the first dash/colon separator
             name_m = re.match(r'^([^–\-:]{3,70}?)(?:\s*[-–:]|$)', b)
             if not name_m:
                 continue
             name = clean(name_m.group(1))
             note_m = re.search(r'[-–:]\s*(.{5,80})', b)
             note = clean(note_m.group(1))[:60] if note_m else ''
+            # Strip "GTA+ members get X times" from note — confuses multiplier display
+            note = re.sub(r'GTA\+\s+members\s+get\s+(?:four|three|two|\d+)\s+times.*', 'GTA+ bonus', note, flags=re.IGNORECASE)
             if 2 < len(name) < 80:
                 key = f"{mult}:{name}"
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
@@ -194,35 +196,53 @@ def parse(html):
     data['salvage'].sort(key=lambda x: x['tier'])
 
     # ── Discounts ────────────────────────────────────────────────────
-    # Pull from actual heading tags — unambiguous
+    # Pull from actual heading tags — unambiguous.
+    # Also checks for nested ul lists inside subheadings (e.g. h3 inside a discount h2).
+    seen_pcts = set()
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         heading_text = heading.get_text(strip=True)
         pct_m = re.search(r'(\d+)%\s*[Oo]ff', heading_text)
         if not pct_m:
             continue
         pct = int(pct_m.group(1))
-        cat = clean(re.sub(r'\d+%\s*[Oo]ff\s*', '', heading_text)) or 'Various Vehicles'
+        cat_raw = re.sub(r'\d+%\s*[Oo]ff\s*', '', heading_text).strip()
+        # Clean up category: remove leading noise words like "Business Discounts" prefix
+        cat_raw = re.sub(r'^(?:Business\s+Discounts?|Vehicle\s+Discounts?|Discounts?)\s*', '', cat_raw, flags=re.IGNORECASE).strip()
+        cat = clean(cat_raw) or 'Various Vehicles'
         items = []
         level = int(heading.name[1])
+        # Collect all list items within this section including nested subheadings
         for sib in heading.find_next_siblings():
             if not sib.name:
                 continue
             if sib.name in ['h1','h2','h3','h4'] and int(sib.name[1]) <= level:
                 break
+            # Direct list
             if sib.name in ['ul', 'ol']:
-                items = [li.get_text(strip=True) for li in sib.find_all('li')]
-                break
-        data['discounts'].append({'pct': pct, 'category': cat, 'until': '', 'items': items})
+                items.extend([li.get_text(strip=True) for li in sib.find_all('li')])
+            # Lists nested inside divs or subheadings
+            for ul in sib.find_all(['ul', 'ol']):
+                items.extend([li.get_text(strip=True) for li in ul.find_all('li')])
+        items = list(dict.fromkeys(items))  # dedupe preserving order
+        # Avoid duplicate pct entries — keep the one with more items
+        existing_same = next((d for d in data['discounts'] if d['pct'] == pct), None)
+        if existing_same:
+            if len(items) > len(existing_same['items']):
+                existing_same['items'] = items
+                existing_same['category'] = cat
+        else:
+            data['discounts'].append({'pct': pct, 'category': cat, 'until': '', 'items': items})
 
-    # Business discount sentence (e.g. "Bail Offices are 40% off")
-    biz_m = re.search(
-        r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)\s+(\d+)%\s*off',
-        full_text, re.IGNORECASE
+    # Business discount sentence (e.g. "All Bail Offices are 40% off")
+    # Try "All X are Y% off" first, then fallback
+    biz_m = (
+        re.search(r'All\s+([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)?\s*(\d+)%\s*off', full_text, re.IGNORECASE) or
+        re.search(r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)\s+(\d+)%\s*off', full_text, re.IGNORECASE)
     )
     if biz_m:
-        cat = clean(biz_m.group(1))
+        cat = 'All ' + clean(biz_m.group(1)) if not biz_m.group(0).lower().startswith('all') else clean(biz_m.group(1))
         pct = int(biz_m.group(2))
-        if not any(d['category'].startswith(cat.split()[0]) for d in data['discounts']):
+        if not any(d['category'].lower().startswith(cat.split()[0].lower()) for d in data['discounts']):
             data['discounts'].insert(0, {'pct': pct, 'category': cat, 'until': '', 'items': []})
 
     # ── Gun Van ──────────────────────────────────────────────────────
