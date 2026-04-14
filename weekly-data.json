@@ -1,58 +1,175 @@
 {
-  "_comment": "Update this every Thursday after the GTA Online weekly reset. Push to GitHub and all extension users get it instantly.",
-  "_updated": "2026-04-09",
+  "_updated": "2026-04-14",
   "weekLabel": "APR 9 – 15",
   "challenge": {
-    "desc": "Secure 2 Bail Office Bounties",
-    "reward": "Winter LSPD Officer Outfit + $100,000"
+    "desc": "Business Discounts",
+    "reward": "Vehicle Discounts"
   },
   "bonuses": [
-    { "multiplier": 4, "name": "Bail Office Bounties",    "note": "GTA+ members only" },
-    { "multiplier": 4, "name": "Wildlife Photography",    "note": "GTA+ members only" },
-    { "multiplier": 2, "name": "Bail Office Staff Income","note": "Passive income"    },
-    { "multiplier": 2, "name": "The Vespucci Job",        "note": "Adversary mode"    },
-    { "multiplier": 2, "name": "Community Combat Series", "note": "Cash & RP"         }
+    {
+      "multiplier": 2,
+      "name": "Your passive earnings from the Bail Office accumulate twice as fast.",
+      "note": ""
+    },
+    {
+      "multiplier": 2,
+      "name": "The Vespucci Job returns with double money and RP for this beach",
+      "note": "themed adversary mode."
+    },
+    {
+      "multiplier": 2,
+      "name": "Player",
+      "note": "created racing content continues paying double money and RP."
+    },
+    {
+      "multiplier": 4,
+      "name": "FREE",
+      "note": ""
+    },
+    {
+      "multiplier": 4,
+      "name": "FREE for GTA+ Members",
+      "note": ""
+    },
+    {
+      "multiplier": 4,
+      "name": "50% off",
+      "note": ""
+    },
+    {
+      "multiplier": 4,
+      "name": "70% off for GTA+ Members",
+      "note": ""
+    },
+    {
+      "multiplier": 4,
+      "name": "40% off for GTA+ Members",
+      "note": ""
+    }
   ],
   "newVehicles": [
-    { "name": "Bravado Buffalo STX Pursuit", "sub": "Now available to all players" }
+    {
+      "name": "Bravado Buffalo STX Pursuit",
+      "sub": "Now available to all players"
+    }
   ],
   "discounts": [
-    { "pct": 40, "category": "All Bail Offices", "until": "April 15", "items": ["Properties, Upgrades & Modifications"] },
-    { "pct": 35, "category": "All Law Enforcement Vehicles", "until": "April 15", "items": ["Bravado Dorado Cruiser","Bravado Gauntlet Interceptor","Bravado Greenwood Cruiser","Canis Terminus Patrol","Declasse Park Ranger","Vapid Caracara Pursuit","Vapid Stanier LE Cruiser","Western Police Bike"] },
-    { "pct": 30, "category": "Various Vehicles", "until": "", "items": ["Bravado Banshee GTS","Dewbauchee JB 700W","Dinka Jester Classic","Grotti Itali Classic","Grotti Stinger","Imponte Ruiner 2000","Nagasaki Outlaw","Pfister Comet Safari","Vapid Winky"] }
+    {
+      "pct": 40,
+      "category": "Business Discounts All Bail Offices",
+      "until": "",
+      "items": []
+    }
   ],
   "podium": "Pfister Growler",
-  "prizeRide": "Annis 300R",
+  "prizeRide": "Challenge",
   "salvage": [
-    { "tier": 1, "robbery": "The Gangbanger Robbery", "car": "Ocelot Swinger"   },
-    { "tier": 2, "robbery": "The Duggan Robbery",     "car": "Dinka Kanjo SJ"   },
-    { "tier": 3, "robbery": "The Podium Robbery",     "car": "Pegassi Zentorno" }
+    {
+      "tier": 1,
+      "robbery": "The Gangbanger\n \nRobbery",
+      "car": "Ocelot Swinger"
+    },
+    {
+      "tier": 3,
+      "robbery": "The Podium Robbery",
+      "car": "Pegassi Zentorno"
+    },
+    {
+      "tier": 3,
+      "robbery": "The Duggan Robbery",
+      "car": "Dinka Kanjo SJ"
+    }
   ],
   "gunVan": [
-    { "name": "Baseball Bat", "deal": "FREE",    "gtaPlus": false },
-    { "name": "Nightstick",   "deal": "FREE",    "gtaPlus": false },
-    { "name": "Stun Gun",     "deal": "FREE",    "gtaPlus": true  },
-    { "name": "Railgun",      "deal": "50% OFF", "gtaPlus": false },
-    { "name": "Body Armor",   "deal": "70% OFF", "gtaPlus": true  },
-    { "name": "Heavy Rifle",  "deal": "40% OFF", "gtaPlus": true  }
+    {
+      "name": "Baseball Bat",
+      "deal": "FREE",
+      "gtaPlus": false
+    },
+    {
+      "name": "Nightstick",
+      "deal": "FREE",
+      "gtaPlus": false
+    },
+    {
+      "name": "Stun Gun",
+      "deal": "FREE",
+      "gtaPlus": true
+    },
+    {
+      "name": "Railgun",
+      "deal": "50% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Body Armor",
+      "deal": "70% OFF",
+      "gtaPlus": true
+    },
+    {
+      "name": "Heavy Rifle",
+      "deal": "40% OFF",
+      "gtaPlus": true
+    }
   ],
-  "fibFile": "The Project Breakaway File",
+  "fibFile": "Project Breakaway File",
   "mostWanted": [
-    { "date": "Apr 9",  "name": "Brock Thompson",  "reward": "$125,000" },
-    { "date": "Apr 10", "name": "Chaz Lieberman",  "reward": "$122,000" },
-    { "date": "Apr 11", "name": "Omar Garcia",     "reward": "$129,000" },
-    { "date": "Apr 12", "name": "Cleo Song",       "reward": "$126,000" },
-    { "date": "Apr 13", "name": "Leroy O'Neil",    "reward": "$130,000" },
-    { "date": "Apr 14", "name": "Grace Whitney",   "reward": "$127,000" },
-    { "date": "Apr 15", "name": "Brock Thompson",  "reward": "$124,000" }
+    {
+      "date": "Apr 9",
+      "name": "Brock Thompson",
+      "reward": "$125,000"
+    },
+    {
+      "date": "Apr 10",
+      "name": "Chaz Lieberman",
+      "reward": "$122,000"
+    },
+    {
+      "date": "Apr 11",
+      "name": "Omar Garcia",
+      "reward": "$129,000"
+    },
+    {
+      "date": "Apr 12",
+      "name": "Cleo Song",
+      "reward": "$126,000"
+    },
+    {
+      "date": "Apr 13",
+      "name": "Leroy O'Neil",
+      "reward": "$130,000"
+    },
+    {
+      "date": "Apr 14",
+      "name": "Grace Whitney",
+      "reward": "$127,000"
+    },
+    {
+      "date": "Apr 15",
+      "name": "Brock Thompson",
+      "reward": "$124,000"
+    }
   ],
   "carMeet": {
-    "prizeRide": "Annis 300R",
+    "prizeRide": "Challenge",
     "prizeReq": "Top 5 in LS Car Meet Series × 3 days in a row",
     "premiumTest": "Karin Vivanite",
     "premiumTestNote": "PS5 / Xbox Series / PC Enhanced only",
-    "testRides": ["Benefactor Streiter", "Declasse Tornado Rat Rod", "Enus Cognoscenti"],
-    "luxuryAutos": ["Pfister Astrale", "Übermacht Sentinel GTS"],
-    "pdm": ["Albany Hermes", "Dewbauchee JB 700W", "Dinka Jester Classic", "Grotti Itali Classic", "Grotti Stinger"]
+    "testRides": [
+      "Benefactor Streiter",
+      "Declasse Tornado Rat Rod",
+      "Enus Cognoscenti"
+    ],
+    "luxuryAutos": [
+      "Pfister Astrale",
+      "Übermacht Sentinel GTS"
+    ],
+    "pdm": [
+      "Albany Hermes",
+      "Dewbauchee JB 700W",
+      "Dinka Jester Classic",
+      "Grotti Itali Classic",
+      "Grotti Stinger"
+    ]
   }
 }
