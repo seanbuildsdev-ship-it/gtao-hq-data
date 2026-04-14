@@ -20,6 +20,8 @@ jobs:
           python-version: '3.11'
       - name: Install dependencies
         run: pip install requests beautifulsoup4
+      - name: Delete old JSON
+        run: rm -f weekly-data.json
       - name: Run scraper
         run: python scraper.py
       - name: Commit updated JSON
@@ -28,4 +30,4 @@ jobs:
           git config user.email "bot@gtao-hq"
           git add weekly-data.json
           git diff --staged --quiet || git commit -m "Weekly update $(date -u '+%Y-%m-%d')"
-          git push --force-with-lease origin main
+          git push origin main
