@@ -1,40 +1,29 @@
 name: Update GTA Online Weekly Data
-
 on:
-  # Runs every Thursday at 10:15 AM UTC (15 min after GTA reset)
   schedule:
     - cron: '15 10 * * 4'
-
-  # Also lets you trigger it manually from the GitHub UI
   workflow_dispatch:
-
 jobs:
   update:
     runs-on: ubuntu-latest
-
     permissions:
-      contents: write   # needed to commit the JSON back to the repo
-
+      contents: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
         run: pip install requests beautifulsoup4
-
       - name: Run scraper
         run: python scraper.py
-
       - name: Commit updated JSON
         run: |
           git config user.name  "gtao-hq-bot"
           git config user.email "bot@gtao-hq"
+          git pull origin main --rebase
           git add weekly-data.json
-          # Only commit if something actually changed
           git diff --staged --quiet || git commit -m "Weekly update $(date -u '+%Y-%m-%d')"
           git push
