@@ -11,6 +11,9 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -23,7 +26,6 @@ jobs:
         run: |
           git config user.name  "gtao-hq-bot"
           git config user.email "bot@gtao-hq"
-          git pull --rebase origin main
           git add weekly-data.json
           git diff --staged --quiet || git commit -m "Weekly update $(date -u '+%Y-%m-%d')"
-          git push origin main
+          git push --force-with-lease origin main
