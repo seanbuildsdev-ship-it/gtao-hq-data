@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-GTA Online HQ — Weekly Data Scraper v2
-Uses BeautifulSoup HTML structure (h2/h3 tags) instead of plain text regex.
-This is far more reliable — headings are unambiguous in HTML.
+GTA Online HQ — Weekly Data Scraper v3
+Hybrid approach:
+  - Remove TOC from soup first (fixes challenge parsing)
+  - Use HTML headings for discounts (most reliable)
+  - Use section-scoped text regex for everything else (bonuses, salvage, gun van)
 """
 
-import json
-import re
-import sys
-import datetime
+import json, re, sys, datetime
 import requests
 from bs4 import BeautifulSoup
 
-# ── Sources ───────────────────────────────────────────────────────────
 SOURCES = [
     "https://techwiser.com/gta-online-weekly-update/",
     "https://www.sportskeeda.com/gta/gta-online-weekly-update",
@@ -33,53 +31,13 @@ def fetch(url):
         r.raise_for_status()
         return r.text
     except Exception as e:
-        print(f"  [WARN] fetch failed for {url}: {e}")
+        print(f"  [WARN] {url}: {e}")
         return None
 
-# ── BeautifulSoup section helpers ─────────────────────────────────────
-
-def get_section_text(soup, pattern):
-    """
-    Find the first h2/h3/h4 matching pattern.
-    Return all text content until the next heading at the same or higher level.
-    Stops cleanly — no bleeding into other sections.
-    """
-    for heading in soup.find_all(['h2', 'h3', 'h4']):
-        if re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
-            level = int(heading.name[1])
-            parts = []
-            for sib in heading.find_next_siblings():
-                if not sib.name:
-                    continue
-                if sib.name in ['h1','h2','h3','h4'] and int(sib.name[1]) <= level:
-                    break
-                parts.append(sib.get_text(separator='\n', strip=True))
-            return '\n'.join(parts)
-    return ''
-
-
-def get_section_bullets(soup, pattern):
-    """
-    Find a section heading matching pattern.
-    Return list items from the first ul/ol inside that section only.
-    Stops at the next heading — no bleed.
-    """
-    for heading in soup.find_all(['h2', 'h3', 'h4']):
-        if re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
-            level = int(heading.name[1])
-            for sib in heading.find_next_siblings():
-                if not sib.name:
-                    continue
-                if sib.name in ['h1','h2','h3','h4'] and int(sib.name[1]) <= level:
-                    break
-                if sib.name in ['ul', 'ol']:
-                    return [li.get_text(strip=True) for li in sib.find_all('li')]
-    return []
-
+# ── Helpers ───────────────────────────────────────────────────────────
 
 def clean(s):
     return re.sub(r'\s+', ' ', (s or '').replace('*', '')).strip()
-
 
 def salvage_tier(name):
     n = name.lower()
@@ -88,21 +46,96 @@ def salvage_tier(name):
     if re.search(r'gangbanger', n):               return 1
     return 2
 
+def extract_bullets_from_text(text):
+    """Pull bullet lines from a plain text block."""
+    bullets = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if re.match(r'^[-•*+]', line) or re.match(r'^\d+\.', line):
+            line = re.sub(r'^[-•*+\d.]\s*', '', line).replace('**', '').strip()
+            if line:
+                bullets.append(line)
+    return bullets
+
+def get_section_text(text, pattern):
+    """
+    From plain text, find the first heading matching pattern
+    and return content until the next heading.
+    A heading is a short line starting with capital letter or ## prefix.
+    """
+    lines = text.split('\n')
+    active = False
+    body = []
+    for line in lines:
+        t = line.strip()
+        if not t:
+            if active:
+                body.append('')
+            continue
+        # Detect heading: ## prefix or short title-cased line
+        is_heading = bool(re.match(r'^#{1,4}\s', t)) or (
+            len(t) < 100 and t[0].isupper() and
+            not re.search(r'[.!?,;]$', t) and
+            len(t.split()) <= 12
+        )
+        heading_text = re.sub(r'^#+\s*', '', t)
+        if is_heading:
+            if re.search(pattern, heading_text, re.IGNORECASE):
+                active = True
+                continue
+            elif active:
+                break  # Stop at next heading
+        if active:
+            body.append(line)
+    return '\n'.join(body).strip()
+
+def get_html_section_bullets(soup, pattern):
+    """
+    HTML-based: find heading matching pattern, return li items
+    from the first ul/ol — searching inside nested elements too.
+    """
+    for heading in soup.find_all(['h2', 'h3', 'h4']):
+        if re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
+            level = int(heading.name[1])
+            for sib in heading.find_next_siblings():
+                if not sib.name:
+                    continue
+                if sib.name in ['h1','h2','h3','h4'] and int(sib.name[1]) <= level:
+                    break
+                # Direct list
+                if sib.name in ['ul', 'ol']:
+                    return [li.get_text(strip=True) for li in sib.find_all('li')]
+                # List nested inside a div/p
+                ul = sib.find(['ul', 'ol'])
+                if ul:
+                    return [li.get_text(strip=True) for li in ul.find_all('li')]
+    return []
 
 # ── Main Parser ───────────────────────────────────────────────────────
 
 def parse(html):
     soup = BeautifulSoup(html, 'html.parser')
 
-    # Remove navigation, footer, sidebar, scripts — noise
-    for tag in soup.find_all(['nav', 'footer', 'aside', 'script', 'style', 'header']):
+    # 1. Remove noise elements
+    for tag in soup.find_all(['nav','footer','aside','script','style','header']):
         tag.decompose()
 
-    # Remove table of contents (TOC links pollute challenge parsing)
-    for el in soup.find_all(class_=re.compile(r'toc|table.of.content|ez-toc|wp-block-table-of-contents', re.I)):
+    # 2. Remove Table of Contents — critical so challenge regex doesn't hit TOC links
+    for el in soup.find_all(class_=re.compile(r'toc|table.of.content|ez-toc|wp-block-table', re.I)):
         el.decompose()
     for el in soup.find_all(id=re.compile(r'toc|table.of.content', re.I)):
         el.decompose()
+    # Also remove any <ul> that only contains anchor links (classic TOC pattern)
+    for ul in soup.find_all('ul'):
+        links = ul.find_all('a')
+        lis   = ul.find_all('li')
+        if links and len(links) == len(lis) and all(a.get('href','').startswith('#') for a in links):
+            ul.decompose()
+
+    # 3. Get clean plain text from the scrubbed soup
+    text = soup.get_text(separator='\n')
+    text = re.sub(r'\r\n', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
 
     data = {
         "weekLabel":   "",
@@ -123,21 +156,17 @@ def parse(html):
         },
     }
 
-    full_text = soup.get_text(separator='\n')
-
-    # ── Week label (from H1) ──────────────────────────────────────────
+    # ── Week label (H1) ──────────────────────────────────────────────
     h1 = soup.find('h1')
     if h1:
         m = re.search(r'\(([A-Z][a-z]+ \d+\s*[–\-]\s*(?:[A-Z][a-z]+ )?\d+,?\s*\d{4})\)', h1.get_text())
         if m:
-            label = m.group(1)
-            label = re.sub(r',?\s*\d{4}', '', label)
-            label = re.sub(r'(\w{3})\w*\s+(\d+)', lambda x: x.group(1).upper() + ' ' + x.group(2), label)
+            label = re.sub(r',?\s*\d{4}', '', m.group(1))
+            label = re.sub(r'(\w{3})\w*\s+(\d+)', lambda x: x.group(1).upper()+' '+x.group(2), label)
             data['weekLabel'] = label.strip()
 
-    # ── Weekly Challenge ─────────────────────────────────────────────
-    # Uses section body ONLY — avoids TOC which has same heading text
-    chal_body = get_section_text(soup, r'weekly\s+challenge')
+    # ── Weekly Challenge (section-scoped text) ───────────────────────
+    chal_body = get_section_text(text, r'weekly\s+challenge')
     if chal_body:
         m = re.search(r'((?:Secure|Complete|Win|Earn)\s+[^.\n]{5,100})', chal_body, re.IGNORECASE)
         if m:
@@ -145,28 +174,24 @@ def parse(html):
         m = re.search(r'(?:receive|get|earn)\s+(?:the\s+)?([^\n]{5,120})', chal_body, re.IGNORECASE)
         if m:
             data['challenge']['reward'] = clean(m.group(1))
-        # Fallback: first two non-empty lines
         if not data['challenge']['desc']:
             lines = [l.strip() for l in chal_body.split('\n') if len(l.strip()) > 10]
-            if lines:
-                data['challenge']['desc'] = clean(lines[0])
+            if lines: data['challenge']['desc'] = clean(lines[0])
             if len(lines) > 1 and not data['challenge']['reward']:
                 data['challenge']['reward'] = clean(lines[1])
 
-    # ── Bonus Money ──────────────────────────────────────────────────
-    # Each tier extracted from its own section — stops cleanly at next heading.
-    # mult is the SECTION multiplier (the heading says Double/Triple/Quadruple).
-    # We use ONLY the section multiplier — we never override it based on note text.
+    # ── Bonus Money (section-scoped text — stops at next heading) ────
     for mult, pattern in [
         (4, r'quadruple.*(?:money|bonus|reward)'),
         (3, r'triple.*(?:money|bonus|reward)'),
         (2, r'double.*(?:money|bonus|reward)'),
     ]:
-        bullets = get_section_bullets(soup, pattern)
+        section = get_section_text(text, pattern)
+        bullets = extract_bullets_from_text(section)
+        # Fallback: any line with a dash separator
         if not bullets:
-            body = get_section_text(soup, pattern)
-            bullets = [l.strip().lstrip('-•* ') for l in body.split('\n')
-                      if l.strip() and re.match(r'^[-•*]', l.strip())]
+            bullets = [l.strip() for l in section.split('\n')
+                      if l.strip() and ' - ' in l and len(l.strip()) < 120]
 
         for b in bullets:
             b = b.replace('**', '').strip()
@@ -176,18 +201,19 @@ def parse(html):
             name = clean(name_m.group(1))
             note_m = re.search(r'[-–:]\s*(.{5,80})', b)
             note = clean(note_m.group(1))[:60] if note_m else ''
-            # Strip "GTA+ members get X times" from note — confuses multiplier display
-            note = re.sub(r'GTA\+\s+members\s+get\s+(?:four|three|two|\d+)\s+times.*', 'GTA+ bonus', note, flags=re.IGNORECASE)
+            # Never override section multiplier based on note content
+            note = re.sub(r'GTA\+\s+members?\s+get\s+(?:four|three|two|\d+)\s+times.*',
+                          'GTA+ bonus', note, flags=re.IGNORECASE)
             if 2 < len(name) < 80:
                 key = f"{mult}:{name}"
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
                     data['bonuses'].append({'multiplier': mult, 'name': name, 'note': note})
 
-    # ── Salvage Yard ─────────────────────────────────────────────────
-    salvage_text = get_section_text(soup, r'special\s+activit|salvage\s+yard')
+    # ── Salvage (section-scoped text) ────────────────────────────────
+    salvage_body = get_section_text(text, r'special\s+activit|salvage\s+yard')
     for m in re.finditer(
         r'(?:The\s+)?([\w\s]+Robbery)\s*[:–\-]\s*([A-Z][A-Za-z\s]+?)(?:\n|·|,|\.|$)',
-        salvage_text, re.MULTILINE
+        salvage_body, re.MULTILINE
     ):
         robbery = 'The ' + re.sub(r'^The\s+', '', m.group(1).strip())
         car = m.group(2).strip().rstrip('.')
@@ -195,10 +221,7 @@ def parse(html):
             data['salvage'].append({'tier': salvage_tier(robbery), 'robbery': robbery, 'car': car})
     data['salvage'].sort(key=lambda x: x['tier'])
 
-    # ── Discounts ────────────────────────────────────────────────────
-    # Pull from actual heading tags — unambiguous.
-    # Also checks for nested ul lists inside subheadings (e.g. h3 inside a discount h2).
-    seen_pcts = set()
+    # ── Discounts (HTML headings — most reliable) ────────────────────
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         heading_text = heading.get_text(strip=True)
         pct_m = re.search(r'(\d+)%\s*[Oo]ff', heading_text)
@@ -206,53 +229,50 @@ def parse(html):
             continue
         pct = int(pct_m.group(1))
         cat_raw = re.sub(r'\d+%\s*[Oo]ff\s*', '', heading_text).strip()
-        # Clean up category: remove leading noise words like "Business Discounts" prefix
-        cat_raw = re.sub(r'^(?:Business\s+Discounts?|Vehicle\s+Discounts?|Discounts?)\s*', '', cat_raw, flags=re.IGNORECASE).strip()
+        cat_raw = re.sub(r'^(?:Business\s+Discounts?|Vehicle\s+Discounts?|Discounts?)\s*',
+                         '', cat_raw, flags=re.IGNORECASE).strip()
         cat = clean(cat_raw) or 'Various Vehicles'
         items = []
         level = int(heading.name[1])
-        # Collect all list items within this section including nested subheadings
         for sib in heading.find_next_siblings():
-            if not sib.name:
-                continue
-            if sib.name in ['h1','h2','h3','h4'] and int(sib.name[1]) <= level:
-                break
-            # Direct list
-            if sib.name in ['ul', 'ol']:
+            if not sib.name: continue
+            if sib.name in ['h1','h2','h3','h4'] and int(sib.name[1]) <= level: break
+            if sib.name in ['ul','ol']:
                 items.extend([li.get_text(strip=True) for li in sib.find_all('li')])
-            # Lists nested inside divs or subheadings
-            for ul in sib.find_all(['ul', 'ol']):
+            for ul in sib.find_all(['ul','ol']):
                 items.extend([li.get_text(strip=True) for li in ul.find_all('li')])
-        items = list(dict.fromkeys(items))  # dedupe preserving order
-        # Avoid duplicate pct entries — keep the one with more items
-        existing_same = next((d for d in data['discounts'] if d['pct'] == pct), None)
-        if existing_same:
-            if len(items) > len(existing_same['items']):
-                existing_same['items'] = items
-                existing_same['category'] = cat
+        items = list(dict.fromkeys(items))
+        existing = next((d for d in data['discounts'] if d['pct'] == pct), None)
+        if existing:
+            if len(items) > len(existing['items']):
+                existing['items'] = items
+                existing['category'] = cat
         else:
             data['discounts'].append({'pct': pct, 'category': cat, 'until': '', 'items': items})
 
-    # Business discount sentence (e.g. "All Bail Offices are 40% off")
-    # Try "All X are Y% off" first, then fallback
+    # Business discount sentence ("All Bail Offices are 40% off")
     biz_m = (
-        re.search(r'All\s+([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)?\s*(\d+)%\s*off', full_text, re.IGNORECASE) or
-        re.search(r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)\s+(\d+)%\s*off', full_text, re.IGNORECASE)
+        re.search(r'All\s+([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)[^.]*?(\d+)%\s*off', text, re.IGNORECASE) or
+        re.search(r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)\s+(\d+)%\s*off', text, re.IGNORECASE)
     )
     if biz_m:
-        cat = 'All ' + clean(biz_m.group(1)) if not biz_m.group(0).lower().startswith('all') else clean(biz_m.group(1))
+        raw = biz_m.group(0)
+        cat = ('All ' if not raw.lower().startswith('all') else '') + clean(biz_m.group(1))
         pct = int(biz_m.group(2))
-        if not any(d['category'].lower().startswith(cat.split()[0].lower()) for d in data['discounts']):
+        if not any(d['category'].lower().startswith('all') and str(d['pct']) == str(pct)
+                   for d in data['discounts']):
             data['discounts'].insert(0, {'pct': pct, 'category': cat, 'until': '', 'items': []})
 
-    # ── Gun Van ──────────────────────────────────────────────────────
-    # Strict: only bullets from within the Gun Van section
-    gun_bullets = get_section_bullets(soup, r'gun\s+van')
-    for b in gun_bullets:
+    # ── Gun Van (section-scoped text) ────────────────────────────────
+    gv_body = get_section_text(text, r'gun\s+van')
+    # Also try HTML bullets as fallback
+    gv_bullets = extract_bullets_from_text(gv_body)
+    if not gv_bullets:
+        gv_bullets = get_html_section_bullets(soup, r'gun\s+van')
+    for b in gv_bullets:
         b = b.replace('**', '').strip()
         name = re.sub(r'[-–:].+$', '', b).replace('GTA+', '').strip()
-        if not (3 <= len(name) <= 50):
-            continue
+        if not (3 <= len(name) <= 50): continue
         free  = bool(re.search(r'\bfree\b', b, re.IGNORECASE))
         pct_m = re.search(r'(\d+)%\s*off', b, re.IGNORECASE)
         plus  = bool(re.search(r'GTA\+', b, re.IGNORECASE))
@@ -261,58 +281,66 @@ def parse(html):
             data['gunVan'].append({'name': name, 'deal': deal, 'gtaPlus': plus})
 
     # ── Podium / Lucky Wheel ─────────────────────────────────────────
-    m = re.search(r'Lucky\s+Wheel[:\s·]+([A-Z][A-Za-z\s]+?)(?:\n|·|,)', full_text, re.IGNORECASE)
+    m = re.search(r'Lucky\s+Wheel[:\s·]+([A-Z][A-Za-z\s]+?)(?:\n|·|,)', text, re.IGNORECASE)
     if m:
         data['podium'] = m.group(1).strip()
 
-    # ── Prize Ride ───────────────────────────────────────────────────
-    m = (re.search(r'Prize\s+Ride(?:\s+Challenge)?[:\s]+(?:win\s+)?(?:the\s+)?([A-Z][A-Za-z\s]+?)(?:\n|·|,|to\s+win)', full_text, re.IGNORECASE) or
-         re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', full_text, re.IGNORECASE))
+    # ── Prize Ride (never capture heading words like "Challenge") ────
+    # Look for pattern after the colon, not in the heading itself
+    m = re.search(
+        r'Prize\s+Ride\s+Challenge[:\s]*\n+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)',
+        text, re.IGNORECASE
+    )
+    if not m:
+        m = re.search(
+            r'Prize\s+Ride[:\s]+(?!Challenge)([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|to\s+win)',
+            text, re.IGNORECASE
+        )
+    if not m:
+        m = re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', text, re.IGNORECASE)
     if m:
-        data['prizeRide'] = m.group(1).strip()
+        candidate = m.group(1).strip()
+        if candidate.lower() not in ('challenge', 'the', 'a', 'an'):
+            data['prizeRide'] = candidate
 
     # ── FIB File ─────────────────────────────────────────────────────
-    m = (re.search(r'(?:FIB\s+Priority\s+File|Priority\s+File)[:\s]+(?:the\s+)?([A-Z][A-Za-z\s]+File)', full_text, re.IGNORECASE) or
-         re.search(r'The\s+([A-Z][A-Za-z\s]+File)\s*[–\-]', full_text, re.IGNORECASE))
+    m = (re.search(r'(?:FIB\s+Priority\s+File|Priority\s+File)[:\s]+(?:the\s+)?([A-Z][A-Za-z\s]+File)', text, re.IGNORECASE) or
+         re.search(r'The\s+([A-Z][A-Za-z\s]+File)\s*[–\-]', text, re.IGNORECASE))
     if m:
         data['fibFile'] = m.group(1).strip()
 
     # ── Most Wanted ──────────────────────────────────────────────────
     for m in re.finditer(
         r'([A-Z][a-z]+ [A-Z][a-z\']+(?:\s+[A-Z][a-z]+)?)\s*[-–]\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+)\s*[-–]\s*(?:GTA)?\$?([\d,]+)',
-        full_text
+        text
     ):
-        name   = m.group(1).strip()
-        date   = m.group(2).strip()
-        reward = '$' + m.group(3)
+        name, date, reward = m.group(1).strip(), m.group(2).strip(), '$' + m.group(3)
         if not any(t['name'] == name and t['date'] == date for t in data['mostWanted']):
             data['mostWanted'].append({'name': name, 'date': date, 'reward': reward})
-    data['mostWanted'].sort(key=lambda x: int(re.sub(r'\D', '', x['date']) or '0'))
+    data['mostWanted'].sort(key=lambda x: int(re.sub(r'\D','',x['date']) or '0'))
 
     # ── LS Car Meet ──────────────────────────────────────────────────
-    cm_body = get_section_text(soup, r'LS\s+Car\s+Meet\s+Activit')
+    cm_body = get_section_text(text, r'LS\s+Car\s+Meet\s+Activit')
     if not cm_body:
-        cm_body = get_section_text(soup, r'LS\s+Car\s+Meet')
+        cm_body = get_section_text(text, r'LS\s+Car\s+Meet')
 
     if cm_body:
         if data['prizeRide']:
             data['carMeet']['prizeRide'] = data['prizeRide']
-
-        m = re.search(r'Prize\s+Ride[:\s]+(?:[^\n]*?to\s+win\s+(?:the\s+)?)?([A-Z][A-Za-z\s]+?)(?:\n|·|,)', cm_body, re.IGNORECASE)
+        m = re.search(r'Prize\s+Ride[:\s]+(?:[^\n]*to\s+win\s+(?:the\s+)?)?([A-Z][A-Za-z\s]+?)(?:\n|·|,)', cm_body, re.IGNORECASE)
         if m:
-            data['carMeet']['prizeRide'] = re.sub(r'(?:top|place).+', '', m.group(1), flags=re.IGNORECASE).strip()
-
+            candidate = re.sub(r'(?:top|place).+', '', m.group(1), flags=re.IGNORECASE).strip()
+            if candidate.lower() not in ('challenge',''):
+                data['carMeet']['prizeRide'] = candidate
         m = re.search(r'((?:top|place)\s+\d+[^\n.]+?(?:\d+\s+days|a\s+row))', cm_body, re.IGNORECASE)
         if m:
             data['carMeet']['prizeReq'] = m.group(1).strip()
-
         m = re.search(r'Premium\s+Test\s+(?:Ride|Drive)[:\s]+([A-Z][A-Za-z\s]+?)(?:\n|·|,|-)', cm_body, re.IGNORECASE)
         if m:
             data['carMeet']['premiumTest'] = m.group(1).strip()
             note_m = re.search(r'(?:Enhanced|PS5|Series|exclusive)[^\n]*', cm_body, re.IGNORECASE)
             if note_m:
                 data['carMeet']['premiumTestNote'] = clean(note_m.group(0))
-
         m = re.search(r'Test\s+(?:Vehicles?|Track|Rides?)[:\s]+((?:[^\n]+\n?){1,6})', cm_body, re.IGNORECASE)
         if m:
             rides = []
@@ -321,22 +349,23 @@ def parse(html):
                 if 2 < len(line) < 60:
                     rides.append(line)
             data['carMeet']['testRides'] = rides[:5]
-
         m = re.search(r'Lucky\s+Wheel[:\s·]+([A-Z][A-Za-z\s]+?)(?:\n|·|,)', cm_body, re.IGNORECASE)
         if m and not data['podium']:
             data['podium'] = m.group(1).strip()
 
     # PDM Showroom
-    pdm = get_section_bullets(soup, r'Premium\s+Deluxe\s+Motorsport\s+Showroom')
-    if not pdm:
-        pdm = get_section_bullets(soup, r'Premium\s+Deluxe\s+Motorsport')
-    data['carMeet']['pdm'] = [re.sub(r'\s*\(\d+%.*?\)', '', v).strip() for v in pdm if 2 < len(v) < 60][:8]
+    pdm_body = get_section_text(text, r'Premium\s+Deluxe\s+Motorsport')
+    pdm_bullets = extract_bullets_from_text(pdm_body)
+    if not pdm_bullets:
+        pdm_bullets = get_html_section_bullets(soup, r'Premium\s+Deluxe\s+Motorsport')
+    data['carMeet']['pdm'] = [re.sub(r'\s*\(\d+%.*?\)','',v).strip() for v in pdm_bullets if 2<len(v)<60][:8]
 
     # Luxury Autos
-    la = get_section_bullets(soup, r'Luxury\s+Autos\s+Showroom')
-    if not la:
-        la = get_section_bullets(soup, r'Luxury\s+Autos')
-    data['carMeet']['luxuryAutos'] = [v for v in la if 2 < len(v) < 60][:6]
+    la_body = get_section_text(text, r'Luxury\s+Autos')
+    la_bullets = extract_bullets_from_text(la_body)
+    if not la_bullets:
+        la_bullets = get_html_section_bullets(soup, r'Luxury\s+Autos')
+    data['carMeet']['luxuryAutos'] = [v for v in la_bullets if 2<len(v)<60][:6]
 
     return data
 
@@ -353,22 +382,25 @@ def main():
         if not html or len(html) < 1000:
             print("  [WARN] Response missing or too short, skipping")
             continue
-
         result = parse(html)
         has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage') or result.get('discounts')
-
         if has_data:
             parsed = result
             print(f"  ✓ Parsed successfully from {url}")
             print(f"    weekLabel  = '{parsed['weekLabel']}'")
             print(f"    challenge  = '{parsed['challenge']['desc'][:60]}'")
-            print(f"    bonuses    = {len(parsed['bonuses'])}")
-            print(f"    salvage    = {len(parsed['salvage'])}")
-            print(f"    discounts  = {len(parsed['discounts'])}")
-            print(f"    gunVan     = {len(parsed['gunVan'])}")
+            b_list = [str(b['multiplier'])+'x '+b['name'][:20] for b in parsed['bonuses']]
+            s_list = [s['car'] for s in parsed['salvage']]
+            d_list = [str(d['pct'])+'% '+d['category'][:15] for d in parsed['discounts']]
+            g_list = [g['name'] for g in parsed['gunVan']]
+            print(f"    bonuses    = {len(parsed['bonuses'])} {b_list}")
+            print(f"    salvage    = {len(parsed['salvage'])} {s_list}")
+            print(f"    discounts  = {len(parsed['discounts'])} {d_list}")
+            print(f"    gunVan     = {len(parsed['gunVan'])} {g_list}")
             print(f"    mostWanted = {len(parsed['mostWanted'])}")
             print(f"    podium     = '{parsed['podium']}'")
             print(f"    prizeRide  = '{parsed['prizeRide']}'")
+            print(f"    fibFile    = '{parsed['fibFile']}'")
             break
         else:
             print("  [WARN] No useful data found, trying next source")
@@ -383,10 +415,10 @@ def main():
     except Exception:
         existing = {}
 
-    def pick(scraped, existing_val):
-        if isinstance(scraped, list):   return scraped if scraped else existing_val
-        if isinstance(scraped, dict):   return scraped if any(scraped.values()) else existing_val
-        return scraped if scraped else existing_val
+    def pick(s, e):
+        if isinstance(s, list): return s if s else e
+        if isinstance(s, dict): return s if any(s.values()) else e
+        return s if s else e
 
     output = {
         "_updated":    datetime.datetime.utcnow().strftime("%Y-%m-%d"),
@@ -418,8 +450,8 @@ def main():
     print(f"\n✅ Done! Week: {output['weekLabel']} | "
           f"Bonuses: {len(output['bonuses'])} | "
           f"Salvage: {len(output['salvage'])} | "
-          f"GunVan: {len(output['gunVan'])}")
-
+          f"GunVan: {len(output['gunVan'])} | "
+          f"Discounts: {len(output['discounts'])}")
 
 if __name__ == "__main__":
     main()
