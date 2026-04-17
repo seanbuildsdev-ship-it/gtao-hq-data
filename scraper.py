@@ -1,30 +1,22 @@
 #!/usr/bin/env python3
 """
-GTA Online HQ — Weekly Data Scraper v4
-Uses find_all_next() to traverse nested HTML content reliably.
-Bold text inside <li> tags was causing false heading detection in v3.
+GTA Online HQ — Weekly Data Scraper v5
+- Checks freshness before saving (no stale data)
+- Tries rolling URLs first, then RSS lookup, then PCQuest search
+- Runs 3x on Thursday so late-publishing sites get caught
 """
 
-import json, re, sys, datetime
+import json, re, sys, datetime, urllib.parse
 import requests
 from bs4 import BeautifulSoup
 
-# Rolling URLs (updated in place each week)
+# ── Sources ───────────────────────────────────────────────────────────
+
 ROLLING_SOURCES = [
     "https://techwiser.com/gta-online-weekly-update/",
     "https://www.sportskeeda.com/gta/gta-online-weekly-update",
     "https://www.dexerto.com/gta/gta-online-weekly-update-patch-notes-1498644/",
 ]
-
-# Google News RSS — finds the LATEST article URL each week automatically
-# Far more reliable than rolling URLs when sites publish late
-GOOGLE_NEWS_QUERIES = [
-    "GTA Online weekly update site:techwiser.com",
-    "GTA Online weekly update site:sportskeeda.com",
-    "GTA Online weekly update April 2026",
-]
-
-SOURCES = ROLLING_SOURCES  # used as fallback
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -32,15 +24,45 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-# ─────────────────────────────────────────────────────────────────────
+# ── Fetch ─────────────────────────────────────────────────────────────
+
 def fetch(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
         r.raise_for_status()
         return r.text
     except Exception as e:
-        print(f"  [WARN] {url}: {e}")
+        print(f"  [WARN] fetch {url}: {e}")
         return None
+
+def find_fresh_url_via_rss(domain):
+    """Use Google News RSS to find latest GTA weekly article on a domain."""
+    query = f"GTA Online weekly update site:{domain}"
+    rss = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=en-US&gl=US&ceid=US:en"
+    try:
+        r = requests.get(rss, headers=HEADERS, timeout=10)
+        if not r.ok:
+            return None
+        links = re.findall(r'<link>([^<]+)</link>', r.text)
+        for link in links:
+            if domain in link and 'gta' in link.lower() and 'weekly' in link.lower():
+                return link
+    except Exception as e:
+        print(f"  [WARN] RSS {domain}: {e}")
+    return None
+
+# ── Freshness check ───────────────────────────────────────────────────
+
+def is_fresh(scraped_label, stored_label):
+    """True if scraped data is a different week than what's stored."""
+    if not stored_label:
+        return True
+    if not scraped_label:
+        return False
+    norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
+    return norm(scraped_label) != norm(stored_label)
+
+# ── Helpers ───────────────────────────────────────────────────────────
 
 def clean(s):
     return re.sub(r'\s+', ' ', (s or '').replace('*', '')).strip()
@@ -52,17 +74,8 @@ def salvage_tier(name):
     if re.search(r'gangbanger', n):               return 1
     return 2
 
-# ─────────────────────────────────────────────────────────────────────
-# Core helper: find a heading, collect all <li>/<p> until next heading
-# Uses find_all_next() which traverses ALL nested content — no blind spots.
-# ─────────────────────────────────────────────────────────────────────
 def get_section_items(soup, pattern, include_paragraphs=True):
-    """
-    Find first h2/h3/h4 matching pattern.
-    Return list of text strings from li elements (and optionally p elements)
-    until the next heading at the same or higher level.
-    find_all_next() descends into nested elements — avoids the sibling-only problem.
-    """
+    """Find heading matching pattern, collect li/p items until next heading."""
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         if not re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
             continue
@@ -70,17 +83,14 @@ def get_section_items(soup, pattern, include_paragraphs=True):
         items = []
         seen = set()
         for el in heading.find_all_next():
-            # Stop at next heading of same or higher level
             if el.name in ['h1', 'h2', 'h3', 'h4']:
                 if int(el.name[1]) <= level:
                     break
-            # Collect <li> content (covers bullet lists)
             if el.name == 'li':
                 text = el.get_text(separator=' ', strip=True)
                 if text and text not in seen and 2 < len(text) < 250:
                     items.append(text)
                     seen.add(text)
-            # Collect <p> with dash separators (some sites use paragraphs not lists)
             elif include_paragraphs and el.name == 'p':
                 text = el.get_text(strip=True)
                 if text and ' - ' in text and text not in seen and 2 < len(text) < 250:
@@ -90,11 +100,7 @@ def get_section_items(soup, pattern, include_paragraphs=True):
     return []
 
 def get_section_text(soup, pattern):
-    """
-    Get all text content in a section (heading to next heading).
-    Used for challenge, salvage, gun van, car meet — where we need
-    full text for regex matching rather than bullet lists.
-    """
+    """Get full text of a section (heading to next heading)."""
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         if not re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
             continue
@@ -113,23 +119,22 @@ def get_section_text(soup, pattern):
         return '\n'.join(parts)
     return ''
 
-# ─────────────────────────────────────────────────────────────────────
+# ── Parser ────────────────────────────────────────────────────────────
+
 def parse(html):
     soup = BeautifulSoup(html, 'html.parser')
 
     # Remove noise
     for tag in soup.find_all(['nav', 'footer', 'aside', 'script', 'style', 'header']):
         tag.decompose()
-
-    # Remove Table of Contents (anchor-only lists, TOC class names)
     for el in soup.find_all(class_=re.compile(r'toc|table.of.content|ez-toc', re.I)):
         el.decompose()
     for el in soup.find_all(id=re.compile(r'toc|table.of.content', re.I)):
         el.decompose()
     for ul in soup.find_all('ul'):
         links = ul.find_all('a')
-        lis   = ul.find_all('li', recursive=False)
-        if links and len(links) == len(lis) and all(a.get('href','').startswith('#') for a in links):
+        lis = ul.find_all('li', recursive=False)
+        if links and len(links) == len(lis) and all(a.get('href', '').startswith('#') for a in links):
             ul.decompose()
 
     full_text = soup.get_text(separator='\n')
@@ -155,7 +160,7 @@ def parse(html):
         },
     }
 
-    # ── Week label ───────────────────────────────────────────────────
+    # Week label
     h1 = soup.find('h1')
     if h1:
         m = re.search(r'\(([A-Z][a-z]+ \d+\s*[–\-]\s*(?:[A-Z][a-z]+ )?\d+,?\s*\d{4})\)', h1.get_text())
@@ -164,7 +169,7 @@ def parse(html):
             label = re.sub(r'(\w{3})\w*\s+(\d+)', lambda x: x.group(1).upper()+' '+x.group(2), label)
             data['weekLabel'] = label.strip()
 
-    # ── Weekly Challenge ─────────────────────────────────────────────
+    # Challenge
     chal_text = get_section_text(soup, r'weekly\s+challenge')
     if chal_text:
         m = re.search(r'((?:Secure|Complete|Win|Earn)\s+[^.\n]{5,100})', chal_text, re.IGNORECASE)
@@ -175,11 +180,12 @@ def parse(html):
             data['challenge']['reward'] = clean(m.group(1))
         if not data['challenge']['desc']:
             lines = [l.strip() for l in chal_text.split('\n') if len(l.strip()) > 10]
-            if lines: data['challenge']['desc'] = clean(lines[0])
+            if lines:
+                data['challenge']['desc'] = clean(lines[0])
             if len(lines) > 1 and not data['challenge']['reward']:
                 data['challenge']['reward'] = clean(lines[1])
 
-    # ── Bonus Money ──────────────────────────────────────────────────
+    # Bonus Money
     for mult, pattern in [
         (4, r'quadruple.*(?:money|bonus|reward)'),
         (3, r'triple.*(?:money|bonus|reward)'),
@@ -188,14 +194,12 @@ def parse(html):
         items = get_section_items(soup, pattern, include_paragraphs=True)
         for b in items:
             b = b.replace('**', '').strip()
-            # Name is text before first dash or colon
             name_m = re.match(r'^([^–\-:]{3,70}?)(?:\s*[-–:]|$)', b)
             if not name_m:
                 continue
             name = clean(name_m.group(1))
             note_m = re.search(r'[-–:]\s*(.{5,80})', b)
             note = clean(note_m.group(1))[:60] if note_m else ''
-            # Don't let "GTA+ gets 4x" in a Triple section flip the multiplier
             note = re.sub(r'GTA\+\s+members?\s+get\s+(?:four|three|two|\d+)\s+times.*',
                           'GTA+ bonus', note, flags=re.IGNORECASE)
             if 2 < len(name) < 80:
@@ -203,7 +207,7 @@ def parse(html):
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
                     data['bonuses'].append({'multiplier': mult, 'name': name, 'note': note})
 
-    # ── Salvage ──────────────────────────────────────────────────────
+    # Salvage
     salvage_text = get_section_text(soup, r'special\s+activit|salvage\s+yard')
     for m in re.finditer(
         r'(?:The\s+)?([\w\s]+Robbery)\s*[:–\-]\s*([A-Z][A-Za-z\s]+?)(?:\n|·|,|\.|$)',
@@ -215,7 +219,7 @@ def parse(html):
             data['salvage'].append({'tier': salvage_tier(robbery), 'robbery': robbery, 'car': car})
     data['salvage'].sort(key=lambda x: x['tier'])
 
-    # ── Discounts ────────────────────────────────────────────────────
+    # Discounts
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         heading_text = heading.get_text(strip=True)
         pct_m = re.search(r'(\d+)%\s*[Oo]ff', heading_text)
@@ -230,7 +234,7 @@ def parse(html):
         items = []
         seen = set()
         for el in heading.find_all_next():
-            if el.name in ['h1','h2','h3','h4'] and int(el.name[1]) <= level:
+            if el.name in ['h1', 'h2', 'h3', 'h4'] and int(el.name[1]) <= level:
                 break
             if el.name == 'li':
                 text = el.get_text(separator=' ', strip=True)
@@ -247,36 +251,36 @@ def parse(html):
 
     # Business discount sentence
     biz_m = (
-        re.search(r'All\s+([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)[^.]*?(\d+)%\s*off', full_text, re.IGNORECASE) or
-        re.search(r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab)s?)\s+(?:are|is)\s+(\d+)%\s*off', full_text, re.IGNORECASE)
+        re.search(r'All\s+([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab|Farm)s?)[^.]*?(\d+)%\s*off', full_text, re.IGNORECASE) or
+        re.search(r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab|Farm)s?)\s+(?:are|is)\s+(\d+)%\s*off', full_text, re.IGNORECASE)
     )
     if biz_m:
         raw = biz_m.group(0)
         cat = ('All ' if not raw.lower().startswith('all') else '') + clean(biz_m.group(1))
         pct = int(biz_m.group(2))
-        if not any(d['pct'] == pct and 'bail' in d['category'].lower() for d in data['discounts']):
+        if not any(d['pct'] == pct and d['category'].lower().startswith(cat.split()[0].lower()) for d in data['discounts']):
             data['discounts'].insert(0, {'pct': pct, 'category': cat, 'until': '', 'items': []})
 
-    # ── Gun Van ──────────────────────────────────────────────────────
+    # Gun Van
     gv_items = get_section_items(soup, r'gun\s+van', include_paragraphs=False)
     for b in gv_items:
         b = b.replace('**', '').strip()
         name = re.sub(r'[-–:].+$', '', b).replace('GTA+', '').strip()
-        if not (3 <= len(name) <= 50): continue
-        free  = bool(re.search(r'\bfree\b', b, re.IGNORECASE))
+        if not (3 <= len(name) <= 50):
+            continue
+        free = bool(re.search(r'\bfree\b', b, re.IGNORECASE))
         pct_m = re.search(r'(\d+)%\s*off', b, re.IGNORECASE)
-        plus  = bool(re.search(r'GTA\+', b, re.IGNORECASE))
-        deal  = 'FREE' if free else (f"{pct_m.group(1)}% OFF" if pct_m else '')
+        plus = bool(re.search(r'GTA\+', b, re.IGNORECASE))
+        deal = 'FREE' if free else (f"{pct_m.group(1)}% OFF" if pct_m else '')
         if deal:
             data['gunVan'].append({'name': name, 'deal': deal, 'gtaPlus': plus})
 
-    # ── Podium / Lucky Wheel ─────────────────────────────────────────
+    # Podium
     m = re.search(r'Lucky\s+Wheel[:\s·]+([A-Z][A-Za-z\s]+?)(?:\n|·|,)', full_text, re.IGNORECASE)
     if m:
         data['podium'] = m.group(1).strip()
 
-    # ── Prize Ride ───────────────────────────────────────────────────
-    # Look for "to win the X" or "Prize Ride: X" — never capture heading words
+    # Prize Ride
     m = (
         re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', full_text, re.IGNORECASE) or
         re.search(r'Prize\s+Ride[:\s]+(?!Challenge\b)([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,)', full_text, re.IGNORECASE)
@@ -286,7 +290,7 @@ def parse(html):
         if candidate.lower() not in ('challenge', 'the', 'a', 'an', ''):
             data['prizeRide'] = candidate
 
-    # ── FIB File ─────────────────────────────────────────────────────
+    # FIB File
     m = (
         re.search(r'(?:FIB\s+Priority\s+File|Priority\s+File)[:\s]+(?:the\s+)?([A-Z][A-Za-z\s]+File)', full_text, re.IGNORECASE) or
         re.search(r'The\s+([A-Z][A-Za-z\s]+File)\s*[–\-]', full_text, re.IGNORECASE)
@@ -294,7 +298,7 @@ def parse(html):
     if m:
         data['fibFile'] = m.group(1).strip()
 
-    # ── Most Wanted ──────────────────────────────────────────────────
+    # Most Wanted
     for m in re.finditer(
         r'([A-Z][a-z]+ [A-Z][a-z\']+(?:\s+[A-Z][a-z]+)?)\s*[-–]\s*'
         r'((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+)\s*[-–]\s*(?:GTA)?\$?([\d,]+)',
@@ -303,35 +307,34 @@ def parse(html):
         name, date, reward = m.group(1).strip(), m.group(2).strip(), '$'+m.group(3)
         if not any(t['name'] == name and t['date'] == date for t in data['mostWanted']):
             data['mostWanted'].append({'name': name, 'date': date, 'reward': reward})
-    data['mostWanted'].sort(key=lambda x: int(re.sub(r'\D','',x['date']) or '0'))
+    data['mostWanted'].sort(key=lambda x: int(re.sub(r'\D', '', x['date']) or '0'))
 
-    # ── LS Car Meet ──────────────────────────────────────────────────
+    # LS Car Meet
     cm_text = get_section_text(soup, r'LS\s+Car\s+Meet\s+Activit')
     if not cm_text:
         cm_text = get_section_text(soup, r'LS\s+Car\s+Meet')
-
     if cm_text:
         if data['prizeRide']:
             data['carMeet']['prizeRide'] = data['prizeRide']
         m = re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', cm_text, re.IGNORECASE)
         if m:
-            candidate = m.group(1).strip()
-            if candidate.lower() not in ('challenge',''):
-                data['carMeet']['prizeRide'] = candidate
+            c = m.group(1).strip()
+            if c.lower() not in ('challenge', ''):
+                data['carMeet']['prizeRide'] = c
         m = re.search(r'((?:top|place)\s+\d+[^\n.]+?(?:\d+\s+days|a\s+row))', cm_text, re.IGNORECASE)
         if m:
             data['carMeet']['prizeReq'] = m.group(1).strip()
         m = re.search(r'Premium\s+Test\s+(?:Ride|Drive)[:\s]+([A-Z][A-Za-z\s]+?)(?:\n|·|,|-)', cm_text, re.IGNORECASE)
         if m:
             data['carMeet']['premiumTest'] = m.group(1).strip()
-            note_m = re.search(r'(?:Enhanced|PS5|Series|exclusive)[^\n]*', cm_text, re.IGNORECASE)
+            note_m = re.search(r'(?:Enhanced|PS5|Series|exclusive|HSW)[^\n]*', cm_text, re.IGNORECASE)
             if note_m:
                 data['carMeet']['premiumTestNote'] = clean(note_m.group(0))
         m = re.search(r'Test\s+(?:Vehicles?|Track|Rides?)[:\s]+((?:[^\n]+\n?){1,6})', cm_text, re.IGNORECASE)
         if m:
             rides = []
             for line in m.group(1).split('\n'):
-                line = re.sub(r'[-–:].+$','', line.strip().lstrip('-•* ')).strip()
+                line = re.sub(r'[-–:].+$', '', line.strip().lstrip('-•* ')).strip()
                 if 2 < len(line) < 60:
                     rides.append(line)
             data['carMeet']['testRides'] = rides[:5]
@@ -339,21 +342,23 @@ def parse(html):
         if m and not data['podium']:
             data['podium'] = m.group(1).strip()
 
-    # PDM Showroom
+    # PDM
     pdm_items = get_section_items(soup, r'Premium\s+Deluxe\s+Motorsport', include_paragraphs=False)
-    data['carMeet']['pdm'] = [re.sub(r'\s*\(\d+%.*?\)','',v).strip() for v in pdm_items if 2<len(v)<60][:8]
+    data['carMeet']['pdm'] = [re.sub(r'\s*\(\d+%.*?\)', '', v).strip() for v in pdm_items if 2 < len(v) < 60][:8]
 
     # Luxury Autos
     la_items = get_section_items(soup, r'Luxury\s+Autos', include_paragraphs=False)
-    data['carMeet']['luxuryAutos'] = [v for v in la_items if 2<len(v)<60][:6]
+    data['carMeet']['luxuryAutos'] = [v for v in la_items if 2 < len(v) < 60][:6]
 
     return data
 
-# ─────────────────────────────────────────────────────────────────────
-def main():
-    print(f"[GTA HQ Scraper] Starting — {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+# ── Main ──────────────────────────────────────────────────────────────
 
-    # Load existing data so we can check freshness
+def main():
+    now = datetime.datetime.utcnow()
+    print(f"[GTA HQ Scraper] Starting — {now.strftime('%Y-%m-%d %H:%M UTC')}")
+
+    # Load existing data for freshness check
     try:
         with open("weekly-data.json", "r", encoding="utf-8") as f:
             existing = json.load(f)
@@ -361,121 +366,104 @@ def main():
     except Exception:
         existing = {}
         existing_label = ""
-    print(f"  Current stored week: '{existing_label}'")
+    print(f"  Stored week: '{existing_label}'")
 
     parsed = None
 
-    # ── Strategy 1: Try rolling URLs (TechWiser, Sportskeeda, Dexerto) ──
+    # ── Strategy 1: Rolling URLs ──────────────────────────────────────
+    print("\n── Strategy 1: Rolling URLs ──")
     for url in ROLLING_SOURCES:
-        print(f"  Trying rolling URL: {url} …")
+        print(f"  Trying {url} …")
         html = fetch(url)
         if not html or len(html) < 1000:
-            print("  [WARN] Response missing or too short")
+            print("  [SKIP] Too short or failed")
             continue
         result = parse(html)
-        has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage') or result.get('discounts')
+        has_data = result.get('weekLabel') or result.get('bonuses') or result.get('discounts')
         if not has_data:
-            print("  [WARN] No useful data found")
+            print("  [SKIP] No useful data parsed")
             continue
-        if not is_fresh(result.get('weekLabel',''), existing_label):
-            print(f"  [SKIP] Stale data — still showing '{result.get('weekLabel')}', same as stored. Site hasn't updated yet.")
+        if not is_fresh(result.get('weekLabel', ''), existing_label):
+            print(f"  [SKIP] Stale — still '{result.get('weekLabel')}', site not updated yet")
             continue
         parsed = result
-        print(f"  ✓ Fresh data from {url}")
+        print(f"  ✓ Fresh! Week: '{result.get('weekLabel')}'")
         break
 
-    # ── Strategy 2: Google News RSS to find latest dated article URL ──
+    # ── Strategy 2: Google News RSS ──────────────────────────────────
     if not parsed:
-        print("  Rolling URLs had stale data. Trying Google News RSS to find latest article…")
-        for domain in ["techwiser.com", "sportskeeda.com", "dexerto.com"]:
-            latest_url = find_latest_url_via_rss(domain)
-            if not latest_url:
+        print("\n── Strategy 2: Google News RSS ──")
+        for domain in ["techwiser.com", "sportskeeda.com"]:
+            url = find_fresh_url_via_rss(domain)
+            if not url:
+                print(f"  [SKIP] No RSS URL found for {domain}")
                 continue
-            print(f"  Found via RSS: {latest_url}")
-            html = fetch(latest_url)
+            print(f"  RSS URL: {url}")
+            html = fetch(url)
             if not html or len(html) < 1000:
                 continue
             result = parse(html)
-            has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage') or result.get('discounts')
-            if has_data and is_fresh(result.get('weekLabel',''), existing_label):
+            has_data = result.get('weekLabel') or result.get('bonuses') or result.get('discounts')
+            if has_data and is_fresh(result.get('weekLabel', ''), existing_label):
                 parsed = result
-                print(f"  ✓ Fresh data via RSS from {domain}")
+                print(f"  ✓ Fresh via RSS! Week: '{result.get('weekLabel')}'")
                 break
             elif has_data:
                 print(f"  [SKIP] RSS article also stale: '{result.get('weekLabel')}'")
 
-    # ── Strategy 3: Direct PCQuest search (new URL every week) ──
+    # ── Strategy 3: PCQuest search ───────────────────────────────────
     if not parsed:
-        print("  Trying PCQuest direct search…")
-        now = datetime.datetime.utcnow()
+        print("\n── Strategy 3: PCQuest search ──")
         month = now.strftime("%B").lower()
         year = now.year
         search_url = f"https://www.pcquest.com/gaming/?s=gta+online+weekly+update+{month}+{year}"
         html = fetch(search_url)
         if html:
-            # Extract first article URL from search results
             urls = re.findall(r'href="(https://www.pcquest.com/gaming/gta-online-weekly-update[^"]+)"', html)
             for url in urls[:3]:
-                print(f"  Trying PCQuest article: {url}")
+                print(f"  Trying PCQuest: {url}")
                 html2 = fetch(url)
                 if not html2 or len(html2) < 1000:
                     continue
                 result = parse(html2)
-                has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage')
-                if has_data and is_fresh(result.get('weekLabel',''), existing_label):
+                has_data = result.get('weekLabel') or result.get('bonuses') or result.get('discounts')
+                if has_data and is_fresh(result.get('weekLabel', ''), existing_label):
                     parsed = result
-                    print(f"  ✓ Fresh data from PCQuest")
+                    print(f"  ✓ Fresh via PCQuest! Week: '{result.get('weekLabel')}'")
                     break
+                elif has_data:
+                    print(f"  [SKIP] PCQuest also stale: '{result.get('weekLabel')}'")
 
+    # ── No fresh data found ───────────────────────────────────────────
     if not parsed:
-        print("[WARN] Could not find fresh weekly data from any source.")
-        print("       This usually means sites haven't published the new week yet.")
-        print("       The GitHub Action will retry at 13:00 and 16:00 UTC today.")
-        # Exit 0 so the action doesn't fail — just keeps existing JSON
-        sys.exit(0)
+        print("\n[INFO] No fresh data found from any source.")
+        print("       Sites may not have published the new week yet.")
+        print("       The cron will retry at 13:00 and 16:00 UTC today.")
+        sys.exit(0)  # Clean exit — don't fail the action, just retry later
 
-    # We have fresh data — proceed
-    if True:
-        result = parsed
-        has_data = True
-        if has_data:
-            parsed = result
-            b_list = [str(b['multiplier'])+'x '+b['name'][:25] for b in parsed['bonuses']]
-            s_list = [s['car'] for s in parsed['salvage']]
-            d_list = [str(d['pct'])+'% '+d['category'][:20] for d in parsed['discounts']]
-            g_list = [g['name'] for g in parsed['gunVan']]
-            print(f"  ✓ Parsed from {url}")
-            print(f"    weekLabel  = '{parsed['weekLabel']}'")
-            print(f"    challenge  = '{parsed['challenge']['desc'][:60]}'")
-            print(f"    bonuses    = {len(parsed['bonuses'])} {b_list}")
-            print(f"    salvage    = {len(parsed['salvage'])} {s_list}")
-            print(f"    discounts  = {len(parsed['discounts'])} {d_list}")
-            print(f"    gunVan     = {len(parsed['gunVan'])} {g_list}")
-            print(f"    mostWanted = {len(parsed['mostWanted'])}")
-            print(f"    podium     = '{parsed['podium']}'")
-            print(f"    prizeRide  = '{parsed['prizeRide']}'")
-            print(f"    fibFile    = '{parsed['fibFile']}'")
-            break
-        else:
-            print("  [WARN] No useful data found, trying next source")
+    # ── Print debug summary ───────────────────────────────────────────
+    b_list = [str(b['multiplier'])+'x '+b['name'][:25] for b in parsed['bonuses']]
+    s_list = [s['car'] for s in parsed['salvage']]
+    d_list = [str(d['pct'])+'% '+d['category'][:20] for d in parsed['discounts']]
+    g_list = [g['name'] for g in parsed['gunVan']]
+    print(f"\n  weekLabel  = '{parsed['weekLabel']}'")
+    print(f"  challenge  = '{parsed['challenge']['desc'][:60]}'")
+    print(f"  bonuses    = {len(parsed['bonuses'])} {b_list}")
+    print(f"  salvage    = {len(parsed['salvage'])} {s_list}")
+    print(f"  discounts  = {len(parsed['discounts'])} {d_list}")
+    print(f"  gunVan     = {len(parsed['gunVan'])} {g_list}")
+    print(f"  mostWanted = {len(parsed['mostWanted'])}")
+    print(f"  podium     = '{parsed['podium']}'")
+    print(f"  prizeRide  = '{parsed['prizeRide']}'")
 
-    if not parsed:
-        print("[ERROR] All sources failed. weekly-data.json unchanged.")
-        sys.exit(1)
-
-    try:
-        with open("weekly-data.json", "r", encoding="utf-8") as f:
-            existing = json.load(f)
-    except Exception:
-        existing = {}
-
+    # ── Merge with existing and save ──────────────────────────────────
     def pick(s, e):
         if isinstance(s, list): return s if s else e
         if isinstance(s, dict): return s if any(s.values()) else e
         return s if s else e
 
     output = {
-        "_updated":    datetime.datetime.utcnow().strftime("%Y-%m-%d"),
+        "_updated":    now.strftime("%Y-%m-%d"),
         "weekLabel":   pick(parsed["weekLabel"],   existing.get("weekLabel",   "")),
         "challenge":   pick(parsed["challenge"],   existing.get("challenge",   {})),
         "bonuses":     pick(parsed["bonuses"],     existing.get("bonuses",     [])),
@@ -506,6 +494,7 @@ def main():
           f"Salvage:{len(output['salvage'])} | "
           f"GunVan:{len(output['gunVan'])} | "
           f"Discounts:{len(output['discounts'])}")
+
 
 if __name__ == "__main__":
     main()
