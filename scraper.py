@@ -53,15 +53,45 @@ def find_fresh_url_via_rss(domain):
 
 # ── Freshness check ───────────────────────────────────────────────────
 
-def is_fresh(scraped_label, stored_label):
-    """True if scraped data is a different week than what's stored."""
-    if not stored_label:
+def is_current_week(week_label):
+    """Check if week_label matches the current real-world GTA week."""
+    if not week_label:
+        return False
+    now = datetime.datetime.utcnow()
+    month_abbrs = {
+        'JAN':1,'FEB':2,'MAR':3,'APR':4,'MAY':5,'JUN':6,
+        'JUL':7,'AUG':8,'SEP':9,'OCT':10,'NOV':11,'DEC':12
+    }
+    label_upper = week_label.upper()
+    label_month = next((v for k,v in month_abbrs.items() if k in label_upper), None)
+    if label_month and label_month != now.month:
+        return False
+    numbers = re.findall(r'\d+', week_label)
+    if not numbers:
         return True
+    try:
+        start_day = int(numbers[0])
+        return abs(now.day - start_day) <= 7
+    except Exception:
+        return True
+
+def is_fresh(scraped_label, stored_label):
+    """
+    True if scraped data is genuinely new this week.
+    If stored is empty, only accept if scraped matches current calendar week.
+    If stored exists, accept only if labels differ.
+    """
     if not scraped_label:
         return False
     norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
+    if not stored_label:
+        # No stored data — only accept if it matches THIS week's dates
+        result = is_current_week(scraped_label)
+        if not result:
+            print(f"  [SKIP] No stored data but '{scraped_label}' doesn't match current week")
+        return result
+    # Stored exists — accept only if different week
     return norm(scraped_label) != norm(stored_label)
-
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def clean(s):
