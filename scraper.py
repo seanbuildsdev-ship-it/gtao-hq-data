@@ -9,11 +9,22 @@ import json, re, sys, datetime
 import requests
 from bs4 import BeautifulSoup
 
-SOURCES = [
+# Rolling URLs (updated in place each week)
+ROLLING_SOURCES = [
     "https://techwiser.com/gta-online-weekly-update/",
     "https://www.sportskeeda.com/gta/gta-online-weekly-update",
     "https://www.dexerto.com/gta/gta-online-weekly-update-patch-notes-1498644/",
 ]
+
+# Google News RSS — finds the LATEST article URL each week automatically
+# Far more reliable than rolling URLs when sites publish late
+GOOGLE_NEWS_QUERIES = [
+    "GTA Online weekly update site:techwiser.com",
+    "GTA Online weekly update site:sportskeeda.com",
+    "GTA Online weekly update April 2026",
+]
+
+SOURCES = ROLLING_SOURCES  # used as fallback
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -342,15 +353,91 @@ def parse(html):
 def main():
     print(f"[GTA HQ Scraper] Starting — {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
 
+    # Load existing data so we can check freshness
+    try:
+        with open("weekly-data.json", "r", encoding="utf-8") as f:
+            existing = json.load(f)
+        existing_label = existing.get("weekLabel", "")
+    except Exception:
+        existing = {}
+        existing_label = ""
+    print(f"  Current stored week: '{existing_label}'")
+
     parsed = None
-    for url in SOURCES:
-        print(f"  Trying {url} …")
+
+    # ── Strategy 1: Try rolling URLs (TechWiser, Sportskeeda, Dexerto) ──
+    for url in ROLLING_SOURCES:
+        print(f"  Trying rolling URL: {url} …")
         html = fetch(url)
         if not html or len(html) < 1000:
             print("  [WARN] Response missing or too short")
             continue
         result = parse(html)
         has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage') or result.get('discounts')
+        if not has_data:
+            print("  [WARN] No useful data found")
+            continue
+        if not is_fresh(result.get('weekLabel',''), existing_label):
+            print(f"  [SKIP] Stale data — still showing '{result.get('weekLabel')}', same as stored. Site hasn't updated yet.")
+            continue
+        parsed = result
+        print(f"  ✓ Fresh data from {url}")
+        break
+
+    # ── Strategy 2: Google News RSS to find latest dated article URL ──
+    if not parsed:
+        print("  Rolling URLs had stale data. Trying Google News RSS to find latest article…")
+        for domain in ["techwiser.com", "sportskeeda.com", "dexerto.com"]:
+            latest_url = find_latest_url_via_rss(domain)
+            if not latest_url:
+                continue
+            print(f"  Found via RSS: {latest_url}")
+            html = fetch(latest_url)
+            if not html or len(html) < 1000:
+                continue
+            result = parse(html)
+            has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage') or result.get('discounts')
+            if has_data and is_fresh(result.get('weekLabel',''), existing_label):
+                parsed = result
+                print(f"  ✓ Fresh data via RSS from {domain}")
+                break
+            elif has_data:
+                print(f"  [SKIP] RSS article also stale: '{result.get('weekLabel')}'")
+
+    # ── Strategy 3: Direct PCQuest search (new URL every week) ──
+    if not parsed:
+        print("  Trying PCQuest direct search…")
+        now = datetime.datetime.utcnow()
+        month = now.strftime("%B").lower()
+        year = now.year
+        search_url = f"https://www.pcquest.com/gaming/?s=gta+online+weekly+update+{month}+{year}"
+        html = fetch(search_url)
+        if html:
+            # Extract first article URL from search results
+            urls = re.findall(r'href="(https://www.pcquest.com/gaming/gta-online-weekly-update[^"]+)"', html)
+            for url in urls[:3]:
+                print(f"  Trying PCQuest article: {url}")
+                html2 = fetch(url)
+                if not html2 or len(html2) < 1000:
+                    continue
+                result = parse(html2)
+                has_data = result.get('weekLabel') or result.get('bonuses') or result.get('salvage')
+                if has_data and is_fresh(result.get('weekLabel',''), existing_label):
+                    parsed = result
+                    print(f"  ✓ Fresh data from PCQuest")
+                    break
+
+    if not parsed:
+        print("[WARN] Could not find fresh weekly data from any source.")
+        print("       This usually means sites haven't published the new week yet.")
+        print("       The GitHub Action will retry at 13:00 and 16:00 UTC today.")
+        # Exit 0 so the action doesn't fail — just keeps existing JSON
+        sys.exit(0)
+
+    # We have fresh data — proceed
+    if True:
+        result = parsed
+        has_data = True
         if has_data:
             parsed = result
             b_list = [str(b['multiplier'])+'x '+b['name'][:25] for b in parsed['bonuses']]
