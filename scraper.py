@@ -244,11 +244,12 @@ def parse(html):
             if len(lines) > 1 and not data['challenge']['reward']:
                 data['challenge']['reward'] = clean(lines[1])
 
-    # Bonus Money
+    # Bonus Money — patterns cover TechWiser (Quadruple/Triple/Double) 
+    # AND PCQuest (Get 4X GTA$, Get 3X GTA$, Get 2X GTA$)
     for mult, pattern in [
-        (4, r'quadruple.*(?:money|bonus|reward)'),
-        (3, r'triple.*(?:money|bonus|reward)'),
-        (2, r'double.*(?:money|bonus|reward)'),
+        (4, r'(?:quadruple|4[x×]).*(?:money|bonus|reward|gta|rp)'),
+        (3, r'(?:triple|3[x×]).*(?:money|bonus|reward|gta|rp)'),
+        (2, r'(?:double|2[x×]).*(?:money|bonus|reward|gta|rp)'),
     ]:
         items = get_section_items(soup, pattern, include_paragraphs=True)
         for b in items:
@@ -286,8 +287,12 @@ def parse(html):
             continue
         pct = int(pct_m.group(1))
         cat_raw = re.sub(r'\d+%\s*[Oo]ff\s*', '', heading_text).strip()
+        # Remove parentheses that held the percentage e.g. "()" left from "(50% off)"
+        cat_raw = re.sub(r'^[\(\)]+$', '', cat_raw).strip()
         cat_raw = re.sub(r'^(?:Business\s+Discounts?|Vehicle\s+Discounts?|Discounts?)\s*',
                          '', cat_raw, flags=re.IGNORECASE).strip()
+        # Remove any remaining empty parens
+        cat_raw = re.sub(r'\(\s*\)', '', cat_raw).strip()
         cat = clean(cat_raw) or 'Various Vehicles'
         level = int(heading.name[1])
         items = []
@@ -320,16 +325,26 @@ def parse(html):
         if not any(d['pct'] == pct and d['category'].lower().startswith(cat.split()[0].lower()) for d in data['discounts']):
             data['discounts'].insert(0, {'pct': pct, 'category': cat, 'until': '', 'items': []})
 
-    # Gun Van
+    # Gun Van — handles TechWiser and PCQuest formats:
+    # TechWiser: "Baseball Bat - FREE"
+    # PCQuest:   "Free or 100% Off Baseball Bat"  "30% Off: Railgun"
     gv_items = get_section_items(soup, r'gun\s+van', include_paragraphs=False)
     for b in gv_items:
         b = b.replace('**', '').strip()
-        name = re.sub(r'[-–:].+$', '', b).replace('GTA+', '').strip()
+        plus = bool(re.search(r'GTA\+|Members?', b, re.IGNORECASE))
+        free = bool(re.search(r'\bfree\b|100%', b, re.IGNORECASE))
+        pct_m = re.search(r'(\d+)%\s*[Oo]ff', b, re.IGNORECASE)
+
+        # Extract weapon name — remove deal text and GTA+/Members mentions
+        name = b
+        name = re.sub(r'(?:Free\s+or\s+)?100%\s*[Oo]ff\s*', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'\d+%\s*[Oo]ff[:\s]*', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'\bFree\b[:\s]*', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'GTA\+|\bMembers?\b', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'[-–:]', '', name).strip()
         if not (3 <= len(name) <= 50):
             continue
-        free = bool(re.search(r'\bfree\b', b, re.IGNORECASE))
-        pct_m = re.search(r'(\d+)%\s*off', b, re.IGNORECASE)
-        plus = bool(re.search(r'GTA\+', b, re.IGNORECASE))
+
         deal = 'FREE' if free else (f"{pct_m.group(1)}% OFF" if pct_m else '')
         if deal:
             data['gunVan'].append({'name': name, 'deal': deal, 'gtaPlus': plus})
