@@ -36,19 +36,29 @@ def fetch(url):
         return None
 
 def find_fresh_url_via_rss(domain):
-    """Use Google News RSS to find latest GTA weekly article on a domain."""
-    query = f"GTA Online weekly update site:{domain}"
-    rss = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=en-US&gl=US&ceid=US:en"
+    """
+    Find latest GTA weekly article by searching the site directly.
+    Uses site-specific search pages instead of Google (avoids rate limits).
+    """
+    search_urls = {
+        "techwiser.com":    "https://techwiser.com/?s=gta+online+weekly+update",
+        "sportskeeda.com":  "https://www.sportskeeda.com/gta/gta-online-weekly-update",
+        "fandomwire.com":   "https://fandomwire.com/?s=gta+online+weekly+update",
+    }
+    url = search_urls.get(domain)
+    if not url:
+        return None
     try:
-        r = requests.get(rss, headers=HEADERS, timeout=10)
-        if not r.ok:
+        html = fetch(url)
+        if not html:
             return None
-        links = re.findall(r'<link>([^<]+)</link>', r.text)
+        # Find article links containing "weekly" and "gta"
+        links = re.findall(r'href="(https://(?:www\.)?' + re.escape(domain) + r'/[^"]*(?:weekly|gta-online)[^"]*)"', html)
         for link in links:
-            if domain in link and 'gta' in link.lower() and 'weekly' in link.lower():
+            if 'weekly' in link.lower() and 'gta' in link.lower():
                 return link
     except Exception as e:
-        print(f"  [WARN] RSS {domain}: {e}")
+        print(f"  [WARN] Site search {domain}: {e}")
     return None
 
 # ── Freshness check ───────────────────────────────────────────────────
@@ -190,15 +200,22 @@ def parse(html):
         },
     }
 
-    # Week label
+  # Week label — handles multiple formats:
+    # TechWiser: "(April 9 – 15, 2026)"
+    # PCQuest:   "April 16 to 22, 2026"
     h1 = soup.find('h1')
     if h1:
-        m = re.search(r'\(([A-Z][a-z]+ \d+\s*[–\-]\s*(?:[A-Z][a-z]+ )?\d+,?\s*\d{4})\)', h1.get_text())
+        h1_text = h1.get_text()
+        m = (
+            re.search(r'\(([A-Z][a-z]+ \d+\s*[–\-]\s*(?:[A-Z][a-z]+ )?\d+,?\s*\d{4})\)', h1_text) or
+            re.search(r'([A-Z][a-z]+ \d+\s*(?:to|–|-)\s*(?:[A-Z][a-z]+ )?\d+,?\s*\d{4})', h1_text)
+        )
         if m:
-            label = re.sub(r',?\s*\d{4}', '', m.group(1))
+            label = m.group(1)
+            label = re.sub(r',?\s*\d{4}', '', label)
+            label = re.sub(r'\s+to\s+', ' – ', label, flags=re.IGNORECASE)
             label = re.sub(r'(\w{3})\w*\s+(\d+)', lambda x: x.group(1).upper()+' '+x.group(2), label)
             data['weekLabel'] = label.strip()
-
     # Challenge
     chal_text = get_section_text(soup, r'weekly\s+challenge')
     if chal_text:
@@ -423,7 +440,7 @@ def main():
     # ── Strategy 2: Google News RSS ──────────────────────────────────
     if not parsed:
         print("\n── Strategy 2: Google News RSS ──")
-        for domain in ["techwiser.com", "sportskeeda.com"]:
+        for domain in ["techwiser.com", "sportskeeda.com", "fandomwire.com"]:
             url = find_fresh_url_via_rss(domain)
             if not url:
                 print(f"  [SKIP] No RSS URL found for {domain}")
