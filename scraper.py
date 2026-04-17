@@ -35,73 +35,51 @@ def fetch(url):
         print(f"  [WARN] fetch {url}: {e}")
         return None
 
-def find_fresh_url_via_rss(domain):
+def find_fresh_url_via_site_search(domain):
     """
     Find latest GTA weekly article by searching the site directly.
-    Uses site-specific search pages instead of Google (avoids rate limits).
+    Avoids Google rate limits entirely.
     """
     search_urls = {
-        "techwiser.com":    "https://techwiser.com/?s=gta+online+weekly+update",
-        "sportskeeda.com":  "https://www.sportskeeda.com/gta/gta-online-weekly-update",
-        "fandomwire.com":   "https://fandomwire.com/?s=gta+online+weekly+update",
+        "techwiser.com":  "https://techwiser.com/?s=gta+online+weekly+update",
+        "fandomwire.com": "https://fandomwire.com/?s=gta+online+weekly+update",
+        "sportskeeda.com": "https://www.sportskeeda.com/gta/gta-online-weekly-update",
     }
-    url = search_urls.get(domain)
-    if not url:
+    search_url = search_urls.get(domain)
+    if not search_url:
         return None
     try:
-        html = fetch(url)
+        html = fetch(search_url)
         if not html:
             return None
         # Find article links containing "weekly" and "gta"
-        links = re.findall(r'href="(https://(?:www\.)?' + re.escape(domain) + r'/[^"]*(?:weekly|gta-online)[^"]*)"', html)
+        escaped = re.escape(domain)
+        links = re.findall(
+            r'href="(https://(?:www\.)?'  + escaped + r'/[^"]*(?:weekly|gta-online)[^"]*)"'
+            , html
+        )
         for link in links:
-            if 'weekly' in link.lower() and 'gta' in link.lower():
+            if 'weekly' in link.lower() and ('gta' in link.lower() or 'update' in link.lower()):
+                print(f"  Found via site search: {link}")
                 return link
     except Exception as e:
         print(f"  [WARN] Site search {domain}: {e}")
     return None
 
+# Keep old name as alias so Strategy 2 calls still work
+find_fresh_url_via_rss = find_fresh_url_via_site_search
+
 # ── Freshness check ───────────────────────────────────────────────────
 
-def is_current_week(week_label):
-    """Check if week_label matches the current real-world GTA week."""
-    if not week_label:
-        return False
-    now = datetime.datetime.utcnow()
-    month_abbrs = {
-        'JAN':1,'FEB':2,'MAR':3,'APR':4,'MAY':5,'JUN':6,
-        'JUL':7,'AUG':8,'SEP':9,'OCT':10,'NOV':11,'DEC':12
-    }
-    label_upper = week_label.upper()
-    label_month = next((v for k,v in month_abbrs.items() if k in label_upper), None)
-    if label_month and label_month != now.month:
-        return False
-    numbers = re.findall(r'\d+', week_label)
-    if not numbers:
-        return True
-    try:
-        start_day = int(numbers[0])
-        return abs(now.day - start_day) <= 7
-    except Exception:
-        return True
-
 def is_fresh(scraped_label, stored_label):
-    """
-    True if scraped data is genuinely new this week.
-    If stored is empty, only accept if scraped matches current calendar week.
-    If stored exists, accept only if labels differ.
-    """
+    """True if scraped data is a different week than what's stored."""
+    if not stored_label:
+        return True
     if not scraped_label:
         return False
     norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
-    if not stored_label:
-        # No stored data — only accept if it matches THIS week's dates
-        result = is_current_week(scraped_label)
-        if not result:
-            print(f"  [SKIP] No stored data but '{scraped_label}' doesn't match current week")
-        return result
-    # Stored exists — accept only if different week
     return norm(scraped_label) != norm(stored_label)
+
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def clean(s):
@@ -200,9 +178,9 @@ def parse(html):
         },
     }
 
-  # Week label — handles multiple formats:
-    # TechWiser: "(April 9 – 15, 2026)"
-    # PCQuest:   "April 16 to 22, 2026"
+    # Week label — handles multiple formats:
+    # TechWiser/Sportskeeda: "(April 9 – 15, 2026)"
+    # PCQuest/others:        "April 16 to 22, 2026"  or  "April 16-22, 2026"
     h1 = soup.find('h1')
     if h1:
         h1_text = h1.get_text()
@@ -216,6 +194,7 @@ def parse(html):
             label = re.sub(r'\s+to\s+', ' – ', label, flags=re.IGNORECASE)
             label = re.sub(r'(\w{3})\w*\s+(\d+)', lambda x: x.group(1).upper()+' '+x.group(2), label)
             data['weekLabel'] = label.strip()
+
     # Challenge
     chal_text = get_section_text(soup, r'weekly\s+challenge')
     if chal_text:
@@ -437,10 +416,10 @@ def main():
         print(f"  ✓ Fresh! Week: '{result.get('weekLabel')}'")
         break
 
-    # ── Strategy 2: Google News RSS ──────────────────────────────────
+    # ── Strategy 2: Site search for fresh article URLs ───────────────
     if not parsed:
-        print("\n── Strategy 2: Google News RSS ──")
-        for domain in ["techwiser.com", "sportskeeda.com", "fandomwire.com"]:
+        print("\n── Strategy 2: Site search ──")
+        for domain in ["techwiser.com", "fandomwire.com", "sportskeeda.com"]:
             url = find_fresh_url_via_rss(domain)
             if not url:
                 print(f"  [SKIP] No RSS URL found for {domain}")
@@ -473,13 +452,29 @@ def main():
                 if not html2 or len(html2) < 1000:
                     continue
                 result = parse(html2)
-                has_data = result.get('weekLabel') or result.get('bonuses') or result.get('discounts')
-                if has_data and is_fresh(result.get('weekLabel', ''), existing_label):
+                has_data = result.get('bonuses') or result.get('discounts') or result.get('weekLabel')
+                if not has_data:
+                    continue
+                scraped_label = result.get('weekLabel', '')
+                # If weekLabel is empty, check URL for current month/year as proxy
+                if not scraped_label:
+                    now_month = now.strftime("%B").lower()[:3]
+                    url_fresh = now_month in url.lower() and str(now.year) in url
+                    if url_fresh:
+                        # Synthesize label from URL date pattern e.g. "april-16-to-22"
+                        url_dates = re.search(r'(\w+-\d+-to-\d+|\w+-\d+[-–]\d+)', url)
+                        if url_dates:
+                            raw = url_dates.group(1).replace('-', ' ').replace('to', '–')
+                            result['weekLabel'] = re.sub(r'(\w{3})\w*\s+(\d+)',
+                                lambda x: x.group(1).upper()+' '+x.group(2), raw).strip()
+                            scraped_label = result['weekLabel']
+                            print(f"  Synthesized weekLabel from URL: '{scraped_label}'")
+                if is_fresh(scraped_label, existing_label) or (has_data and not existing_label):
                     parsed = result
-                    print(f"  ✓ Fresh via PCQuest! Week: '{result.get('weekLabel')}'")
+                    print(f"  ✓ Fresh via PCQuest! Week: '{scraped_label}'")
                     break
-                elif has_data:
-                    print(f"  [SKIP] PCQuest also stale: '{result.get('weekLabel')}'")
+                else:
+                    print(f"  [SKIP] PCQuest stale: '{scraped_label}'")
 
     # ── No fresh data found ───────────────────────────────────────────
     if not parsed:
