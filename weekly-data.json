@@ -1,9 +1,9 @@
 {
   "_updated": "2026-04-17",
-  "weekLabel": "APR 16 – 22",
+  "weekLabel": "APR 9 – 15",
   "challenge": {
-    "desc": "Complete five waves in the new Stoner Survival to earn the Sasquatch Outfit and $420,000",
-    "reward": "Sasquatch Outfit and $420,000"
+    "desc": "Secure 2 Bail Office Bounties to receive the Winter LSPD Officer Outfit and $100,000",
+    "reward": "Winter LSPD Officer Outfit and $100,000 . With bounties paying quadruple for GTA+, this challenge is very rewarding."
   },
   "bonuses": [
     {
@@ -35,38 +35,53 @@
   "newVehicles": [],
   "discounts": [
     {
-      "pct": 50,
-      "category": "()",
+      "pct": 40,
+      "category": "Bail Offices",
       "until": "",
-      "items": [
-        "Drinks at Nightclub Bars, The Diamond Casino, The Music Locker",
-        "Green Space Horror Suit",
-        "Green Tire Smoke",
-        "Vapid Festival Bus (down from $1,842,000 to $921,000)"
-      ]
+      "items": []
     },
     {
-      "pct": 40,
-      "category": "()",
+      "pct": 35,
+      "category": "Vehicles",
       "until": "",
       "items": [
-        "Weed Farms including Upgrades"
+        "Bravado Dorado Cruiser",
+        "Bravado Gauntlet Interceptor",
+        "Bravado Greenwood Cruiser",
+        "Canis Terminus Patrol",
+        "Declasse Impaler LX Cruiser",
+        "Declasse Impaler SZ Cruiser",
+        "Declasse Park Ranger",
+        "Invetero Coquette D10 Pursuit",
+        "Vapid Caracara Pursuit",
+        "Vapid Dominator FX Interceptor",
+        "Vapid Stanier LE Cruiser",
+        "Vapid Unmarked Cruiser",
+        "Western Police Bike",
+        "Willard Outreach Faction"
       ]
     },
     {
       "pct": 30,
-      "category": "()",
+      "category": "Vehicles",
       "until": "",
       "items": [
-        "Buckingham Tug (down from $1,250,000 to $875,000)",
-        "Declasse Walton L35 (down from $1,670,000 to $1,169,000)",
-        "Gallivanter Baller ST (down from $890,000 to $623,000)",
-        "Gallivanter Baller ST-D (down from $1,715,000 to $1,200,000)",
-        "Imponte Nightshade (down from $585,000 to $409,000)",
-        "Nagasaki Ultralight (down from $665,000 to $465,000)",
-        "Pfister Neon (down from $1,500,000 to $1,050,000)",
-        "Shitzu Hakuchou Drag (down from $976,000 to $683,000)",
-        "Vapid Caracara 4x4 (down from $875,000 to $612,000)"
+        "Bravado Banshee GTS",
+        "Dewbauchee JB 700W",
+        "Dewbauchee Specter",
+        "Dinka Jester Classic",
+        "Grotti Itali Classic",
+        "Grotti Stinger",
+        "Imponte Arbiter GT",
+        "Imponte Ruiner 2000",
+        "Mammoth Squaddie",
+        "Nagasaki Outlaw",
+        "Överflöd Autarch",
+        "Pfister Comet Safari",
+        "Vapid Apocalypse Imperator (Arena)",
+        "Vapid Winky",
+        "Vom Feuer Anti-Aircraft Trailer",
+        "Western Rampant Rocket"
       ]
     }
   ],
@@ -96,32 +111,37 @@
   ],
   "gunVan": [
     {
-      "name": "Free or 100% Off Baseball Bat",
+      "name": "Baseball Bat",
       "deal": "FREE",
       "gtaPlus": false
     },
     {
-      "name": "30% Off",
-      "deal": "30% OFF",
+      "name": "Nightstick",
+      "deal": "FREE",
       "gtaPlus": false
     },
     {
-      "name": "Free 100% Off  Members",
+      "name": "Stun Gun",
       "deal": "FREE",
       "gtaPlus": true
     },
     {
-      "name": "70% Off  Members",
+      "name": "Railgun",
+      "deal": "50% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Body Armor",
       "deal": "70% OFF",
       "gtaPlus": true
     },
     {
-      "name": "40% Off  Members",
+      "name": "Heavy Rifle",
       "deal": "40% OFF",
       "gtaPlus": true
     }
   ],
-  "fibFile": "Black Box File",
+  "fibFile": "Project Breakaway File",
   "mostWanted": [],
   "carMeet": {
     "prizeRide": "",
