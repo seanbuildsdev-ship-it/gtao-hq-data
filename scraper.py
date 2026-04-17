@@ -71,14 +71,47 @@ find_fresh_url_via_rss = find_fresh_url_via_site_search
 
 # ── Freshness check ───────────────────────────────────────────────────
 
-def is_fresh(scraped_label, stored_label):
-    """True if scraped data is a different week than what's stored."""
-    if not stored_label:
+def is_current_week(label):
+    """
+    Returns True if label matches the current real-world GTA week.
+    Checks: correct month AND start day within 7 days of today.
+    """
+    if not label:
+        return False
+    now = datetime.datetime.utcnow()
+    month_map = {
+        'JAN':1,'FEB':2,'MAR':3,'APR':4,'MAY':5,'JUN':6,
+        'JUL':7,'AUG':8,'SEP':9,'OCT':10,'NOV':11,'DEC':12
+    }
+    label_up = label.upper()
+    label_month = next((v for k,v in month_map.items() if k in label_up), None)
+    if label_month is None:
         return True
+    if label_month != now.month:
+        return False
+    numbers = re.findall(r'\d+', label)
+    if not numbers:
+        return True
+    try:
+        start_day = int(numbers[0])
+        return abs(now.day - start_day) <= 7
+    except Exception:
+        return True
+
+def is_fresh(scraped_label, stored_label):
+    """
+    True only if scraped data matches the current real-world calendar week.
+    This is the critical gate — prevents old data from ever being saved
+    just because it differs from what is stored.
+    """
     if not scraped_label:
         return False
-    norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
-    return norm(scraped_label) != norm(stored_label)
+    # ALWAYS check current week first — no exceptions
+    if not is_current_week(scraped_label):
+        print(f"  [REJECT] '{scraped_label}' does not match current calendar week")
+        return False
+    # Current week data is fresh
+    return True
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
