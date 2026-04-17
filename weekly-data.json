@@ -8,35 +8,30 @@
   "bonuses": [
     {
       "multiplier": 4,
-      "name": "Wildlife Photography",
-      "note": "Pays double money and RP. GTA+ bonus"
+      "name": "Log in to receive the Black LD Organics Tee",
+      "note": ""
+    },
+    {
+      "multiplier": 4,
+      "name": "Peyote Plants return",
+      "note": ""
     },
     {
       "multiplier": 3,
-      "name": "Bail Office Bounties",
-      "note": "This pays double money and RP. GTA+ bonus"
+      "name": "First Dose and Last Dose Missions",
+      "note": ""
     },
     {
       "multiplier": 2,
-      "name": "Bail Office Staff Income",
-      "note": "Your passive earnings from the Bail Office accumulate twice "
-    },
-    {
-      "multiplier": 2,
-      "name": "The Vespucci Job",
-      "note": "The Vespucci Job returns with double money and RP for this b"
-    },
-    {
-      "multiplier": 2,
-      "name": "Community Combat Series",
-      "note": "Player-created racing content continues paying double money "
+      "name": "Short Trips",
+      "note": "Community Combat Series"
     }
   ],
   "newVehicles": [],
   "discounts": [
     {
       "pct": 50,
-      "category": "()",
+      "category": "Various Vehicles",
       "until": "",
       "items": [
         "Drinks at Nightclub Bars, The Diamond Casino, The Music Locker",
@@ -47,7 +42,7 @@
     },
     {
       "pct": 40,
-      "category": "()",
+      "category": "Various Vehicles",
       "until": "",
       "items": [
         "Weed Farms including Upgrades"
@@ -55,7 +50,7 @@
     },
     {
       "pct": 30,
-      "category": "()",
+      "category": "Various Vehicles",
       "until": "",
       "items": [
         "Buckingham Tug (down from $1,250,000 to $875,000)",
@@ -96,27 +91,27 @@
   ],
   "gunVan": [
     {
-      "name": "Free or 100% Off Baseball Bat",
+      "name": "Baseball Bat",
       "deal": "FREE",
       "gtaPlus": false
     },
     {
-      "name": "30% Off",
+      "name": "Railgun",
       "deal": "30% OFF",
       "gtaPlus": false
     },
     {
-      "name": "Free 100% Off  Members",
+      "name": "Stun Gun",
       "deal": "FREE",
       "gtaPlus": true
     },
     {
-      "name": "70% Off  Members",
+      "name": "Body Armor",
       "deal": "70% OFF",
       "gtaPlus": true
     },
     {
-      "name": "40% Off  Members",
+      "name": "Military Rifle",
       "deal": "40% OFF",
       "gtaPlus": true
     }
