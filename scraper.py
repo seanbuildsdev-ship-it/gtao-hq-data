@@ -94,7 +94,11 @@ def is_current_week(label):
         return True
     try:
         start_day = int(numbers[0])
-        return abs(now.day - start_day) <= 7
+        # Use proper datetime delta — handles month crossovers correctly
+        # e.g. today=May 2, start_day=Apr 28 would break abs(day) check
+        scraped_date = datetime.datetime(now.year, label_month, start_day)
+        delta = now - scraped_date
+        return abs(delta.days) <= 7
     except Exception:
         return True
 
