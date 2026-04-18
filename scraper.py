@@ -502,6 +502,81 @@ def parse(html):
 
     return data
 
+
+def find_fandomwire_url(now):
+    """
+    Find this week's Fandomwire GTA update article.
+    They publish a new URL each week — great for Most Wanted, podium, prize ride.
+    """
+    month = now.strftime("%B").lower()
+    year = now.year
+    search_url = f"https://fandomwire.com/?s=gta+online+weekly+update+{month}+{year}"
+    try:
+        html = fetch(search_url)
+        if not html:
+            return None
+        urls = re.findall(r'href="(https://fandomwire\.com/gta-online-weekly-update-[^"]+)"', html)
+        # Filter to current month/year
+        now_month_abbr = now.strftime("%B").lower()
+        for url in urls[:5]:
+            if now_month_abbr in url.lower() and str(year) in url:
+                print(f"  Found Fandomwire: {url}")
+                return url
+        # Return first result if no month match
+        return urls[0] if urls else None
+    except Exception as e:
+        print(f"  [WARN] Fandomwire search: {e}")
+    return None
+
+def supplement_from_fandomwire(parsed, now, existing):
+    """
+    Fetch Fandomwire article and fill in fields that primary source missed:
+    - podium, prizeRide (if empty)
+    - mostWanted (always prefer Fandomwire — they have exact dates)
+    - carMeet sections if empty
+    """
+    url = find_fandomwire_url(now)
+    if not url:
+        print("  [Supplement] No Fandomwire URL found")
+        return parsed
+
+    html = fetch(url)
+    if not html or len(html) < 1000:
+        return parsed
+
+    supp = parse(html)
+    print(f"  [Supplement] Fandomwire parsed — podium:'{supp.get('podium')}' prizeRide:'{supp.get('prizeRide')}' mostWanted:{len(supp.get('mostWanted',[]))}")
+
+    # Fill podium if missing
+    if not parsed.get('podium') and supp.get('podium'):
+        parsed['podium'] = supp['podium']
+        print(f"  [Supplement] podium filled: {parsed['podium']}")
+
+    # Fill prizeRide if missing
+    if not parsed.get('prizeRide') and supp.get('prizeRide'):
+        parsed['prizeRide'] = supp['prizeRide']
+        print(f"  [Supplement] prizeRide filled: {parsed['prizeRide']}")
+
+    # Most Wanted — always prefer Fandomwire (best source for this)
+    if supp.get('mostWanted'):
+        parsed['mostWanted'] = supp['mostWanted']
+        print(f"  [Supplement] mostWanted updated: {len(parsed['mostWanted'])} targets")
+
+    # Fill carMeet fields if empty
+    cm = parsed.get('carMeet', {})
+    scm = supp.get('carMeet', {})
+    for field in ['prizeRide', 'prizeReq', 'premiumTest', 'premiumTestNote', 'testRides', 'luxuryAutos', 'pdm']:
+        if not cm.get(field) and scm.get(field):
+            cm[field] = scm[field]
+            print(f"  [Supplement] carMeet.{field} filled")
+    parsed['carMeet'] = cm
+
+    # Fill fibFile if missing
+    if not parsed.get('fibFile') and supp.get('fibFile'):
+        parsed['fibFile'] = supp['fibFile']
+
+    return parsed
+
 # ── Main ──────────────────────────────────────────────────────────────
 
 def main():
@@ -597,6 +672,10 @@ def main():
         print("       The cron will retry at 13:00 and 16:00 UTC today.")
         sys.exit(0)  # Clean exit — don't fail the action, just retry later
 
+    # ── Supplement missing fields from Fandomwire ───────────────────
+    print("\n── Supplementing from Fandomwire ──")
+    parsed = supplement_from_fandomwire(parsed, now, existing)
+
     # ── Print debug summary ───────────────────────────────────────────
     b_list = [str(b['multiplier'])+'x '+b['name'][:25] for b in parsed['bonuses']]
     s_list = [s['car'] for s in parsed['salvage']]
@@ -613,13 +692,17 @@ def main():
     print(f"  prizeRide  = '{parsed['prizeRide']}'")
 
     # ── Merge with existing and save ──────────────────────────────────
-    def pick(s, e):
+    # When week changed, never use old stored values for time-sensitive fields
+    week_changed = bool(parsed.get('weekLabel') and existing.get('weekLabel') and
+                        parsed['weekLabel'] != existing.get('weekLabel'))
+
+    def pick(s, e, time_sensitive=False):
+        # If week changed and field is time-sensitive, only use scraped
+        if time_sensitive and week_changed:
+            return s if s else None
         if isinstance(s, list):
             if not s: return e
             if not e: return s
-            # For lists, prefer whichever has more items
-            # (scraped might have fewer but be more current, so only prefer
-            # existing if it has significantly more items — 2x)
             return s if len(s) >= max(1, len(e) // 2) else e
         if isinstance(s, dict): return s if any(s.values()) else e
         return s if s else e
@@ -631,12 +714,12 @@ def main():
         "bonuses":     pick(parsed["bonuses"],     existing.get("bonuses",     [])),
         "newVehicles": pick(parsed["newVehicles"], existing.get("newVehicles", [])),
         "discounts":   pick(parsed["discounts"],   existing.get("discounts",   [])),
-        "podium":      pick(parsed["podium"],      existing.get("podium",      "")),
-        "prizeRide":   pick(parsed["prizeRide"],   existing.get("prizeRide",   "")),
+        "podium":      pick(parsed["podium"],      existing.get("podium",      ""), time_sensitive=True),
+        "prizeRide":   pick(parsed["prizeRide"],   existing.get("prizeRide",   ""), time_sensitive=True),
         "salvage":     pick(parsed["salvage"],     existing.get("salvage",     [])),
         "gunVan":      pick(parsed["gunVan"],      existing.get("gunVan",      [])),
         "fibFile":     pick(parsed["fibFile"],     existing.get("fibFile",     "")),
-        "mostWanted":  pick(parsed["mostWanted"],  existing.get("mostWanted",  [])),
+        "mostWanted":  pick(parsed["mostWanted"],  existing.get("mostWanted",  []), time_sensitive=True),
         "carMeet": {
             "prizeRide":       pick(parsed["carMeet"]["prizeRide"],       existing.get("carMeet",{}).get("prizeRide",       "")),
             "prizeReq":        pick(parsed["carMeet"]["prizeReq"],        existing.get("carMeet",{}).get("prizeReq",        "")),
