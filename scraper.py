@@ -113,6 +113,46 @@ def is_fresh(scraped_label, stored_label):
     # Current week data is fresh
     return True
 
+
+def is_data_actually_new(scraped, stored):
+    scraped_label = scraped.get('weekLabel', '')
+    stored_label  = stored.get('weekLabel', '')
+    norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
+
+    # Same week label = not new
+    if scraped_label and stored_label and norm(scraped_label) == norm(stored_label):
+        return False, "Same week label"
+
+    checks_passed, checks_total = 0, 0
+
+    if scraped.get('podium') and stored.get('podium'):
+        checks_total += 1
+        if scraped['podium'] != stored['podium']:
+            checks_passed += 1
+        else:
+            print(f"  [WARN] Podium unchanged ({scraped['podium']}) — site may be mid-update")
+
+    if scraped.get('prizeRide') and stored.get('prizeRide'):
+        checks_total += 1
+        if scraped['prizeRide'] != stored['prizeRide']:
+            checks_passed += 1
+        else:
+            print(f"  [WARN] Prize ride unchanged ({scraped['prizeRide']}) — site may be mid-update")
+
+    if scraped.get('bonuses'):
+        checks_total += 1; checks_passed += 1
+
+    if scraped.get('salvage'):
+        checks_total += 1; checks_passed += 1
+
+    if checks_total == 0:
+        return True, "No comparison data"
+
+    score = checks_passed / checks_total
+    if score >= 0.5:
+        return True, f"Quality {checks_passed}/{checks_total}"
+    return False, f"Low quality {checks_passed}/{checks_total} — likely mid-update ghost"
+
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def clean(s):
@@ -139,6 +179,8 @@ def get_section_items(soup, pattern, include_paragraphs=True):
                     break
             if el.name == 'li':
                 text = el.get_text(separator=' ', strip=True)
+                text = re.sub(r'\s*\(down from[^)]+\)', '', text, flags=re.IGNORECASE).strip()
+                text = re.sub(r'\s*\([\$][^)]+\)', '', text).strip()
                 if text and text not in seen and 2 < len(text) < 250:
                     items.append(text)
                     seen.add(text)
@@ -263,6 +305,11 @@ def parse(html):
             note = re.sub(r'GTA\+\s+members?\s+get\s+(?:four|three|two|\d+)\s+times.*',
                           'GTA+ bonus', note, flags=re.IGNORECASE)
             if 2 < len(name) < 80:
+                # Skip login freebies / non-cash items
+                skip_words = ['log in', 'login', 'receive', 'subscribers', 'peyote plants',
+                              'outfit', 'email', 'rockstar propaganda', 'tee', 'return']
+                if any(w in name.lower() for w in skip_words):
+                    continue
                 key = f"{mult}:{name}"
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
                     data['bonuses'].append({'multiplier': mult, 'name': name, 'note': note})
@@ -349,10 +396,21 @@ def parse(html):
         if deal:
             data['gunVan'].append({'name': name, 'deal': deal, 'gtaPlus': plus})
 
-    # Podium
+    # Podium — check Lucky Wheel AND PCQuest "Free Vehicles" section
     m = re.search(r'Lucky\s+Wheel[:\s·]+([A-Z][A-Za-z\s]+?)(?:\n|·|,)', full_text, re.IGNORECASE)
     if m:
         data['podium'] = m.group(1).strip()
+    # PCQuest format: "The Lucky Wheel Podium Vehicle: Western Reever"
+    if not data['podium']:
+        m = re.search(r'Lucky\s+Wheel\s+Podium\s+Vehicle[:\s]+([A-Z][A-Za-z\s]+?)(?:\n|·|,|\.)', full_text, re.IGNORECASE)
+        if m:
+            data['podium'] = m.group(1).strip()
+    # Free Vehicles section
+    free_text = get_section_text(soup, r'free\s+vehicles?|podium\s+vehicle')
+    if free_text and not data['podium']:
+        m = re.search(r'(?:Podium|Lucky\s+Wheel)[:\s]+([A-Z][A-Za-z\s]+?)(?:\n|·|,|\.)', free_text, re.IGNORECASE)
+        if m:
+            data['podium'] = m.group(1).strip()
 
     # Prize Ride
     m = (
@@ -363,6 +421,20 @@ def parse(html):
         candidate = m.group(1).strip()
         if candidate.lower() not in ('challenge', 'the', 'a', 'an', ''):
             data['prizeRide'] = candidate
+    # PCQuest format: "LS Car Meet Prize Ride: BF Club - Place Top 4..."
+    if not data['prizeRide']:
+        m = re.search(r'(?:Car\s+Meet\s+)?Prize\s+Ride[:\s]+([A-Z][A-Za-z\s]{2,40}?)\s*[-–]', full_text, re.IGNORECASE)
+        if m:
+            candidate = m.group(1).strip()
+            if candidate.lower() not in ('challenge', 'the', 'a', 'an', ''):
+                data['prizeRide'] = candidate
+    # Also try free vehicles section
+    if free_text and not data['prizeRide']:
+        m = re.search(r'Prize\s+Ride[:\s]+([A-Z][A-Za-z\s]{2,40}?)\s*[-–]', free_text, re.IGNORECASE)
+        if m:
+            candidate = m.group(1).strip()
+            if candidate.lower() not in ('challenge', ''):
+                data['prizeRide'] = candidate
 
     # FIB File
     m = (
@@ -444,86 +516,76 @@ def main():
 
     parsed = None
 
-    # ── Strategy 1: Rolling URLs ──────────────────────────────────────
-    print("\n── Strategy 1: Rolling URLs ──")
-    for url in ROLLING_SOURCES:
-        print(f"  Trying {url} …")
-        html = fetch(url)
+    def try_parse(html, url, label):
         if not html or len(html) < 1000:
-            print("  [SKIP] Too short or failed")
-            continue
+            print(f"  [SKIP] Response too short/empty")
+            return None
         result = parse(html)
-        has_data = result.get('weekLabel') or result.get('bonuses') or result.get('discounts')
+        scraped_label = result.get('weekLabel', '')
+        # Synthesize label from URL if empty (PCQuest "april-16-to-22" pattern)
+        if not scraped_label and str(now.year) in url:
+            now_month_abbr = now.strftime("%B").lower()[:3]
+            if now_month_abbr in url.lower():
+                url_dates = re.search(r'(\w+(?:-\d+)+)', url.split('/')[-1])
+                if url_dates:
+                    raw = url_dates.group(1).replace('-', ' ').replace('to', ' – ')
+                    synthesized = re.sub(r'(\w{3})\w*\s+(\d+)',
+                        lambda x: x.group(1).upper()+' '+x.group(2), raw).strip()
+                    if synthesized:
+                        result['weekLabel'] = synthesized
+                        scraped_label = synthesized
+                        print(f"  Synthesized label: '{scraped_label}'")
+        has_data = bool(result.get('bonuses') or result.get('discounts') or scraped_label)
         if not has_data:
-            print("  [SKIP] No useful data parsed")
-            continue
-        if not is_fresh(result.get('weekLabel', ''), existing_label):
-            print(f"  [SKIP] Stale — still '{result.get('weekLabel')}', site not updated yet")
-            continue
-        parsed = result
-        print(f"  ✓ Fresh! Week: '{result.get('weekLabel')}'")
-        break
+            print(f"  [SKIP] No useful data")
+            return None
+        if not is_fresh(scraped_label, existing_label):
+            print(f"  [SKIP] Not current week: '{scraped_label}'")
+            return None
+        is_new, reason = is_data_actually_new(result, existing)
+        if not is_new:
+            print(f"  [SKIP] Quality check failed: {reason}")
+            return None
+        print(f"  ✓ Valid! Week:'{scraped_label}' — {reason}")
+        return result
 
-    # ── Strategy 2: Site search for fresh article URLs ───────────────
+    # ── Strategy 1: PCQuest (new URL every week — most reliable) ─────
+    print("\n── Strategy 1: PCQuest (new URL per week) ──")
+    pcq_month = now.strftime("%B").lower()
+    pcq_url = f"https://www.pcquest.com/gaming/?s=gta+online+weekly+update+{pcq_month}+{now.year}"
+    pcq_html = fetch(pcq_url)
+    if pcq_html:
+        pcq_urls = re.findall(r'href="(https://www.pcquest.com/gaming/gta-online-weekly-update[^"]+)"', pcq_html)
+        for url in pcq_urls[:3]:
+            print(f"  Trying: {url}")
+            result = try_parse(fetch(url), url, 'PCQuest')
+            if result:
+                parsed = result
+                break
+
+    # ── Strategy 2: Rolling URLs (TechWiser, Sportskeeda, Dexerto) ───
     if not parsed:
-        print("\n── Strategy 2: Site search ──")
-        for domain in ["techwiser.com", "fandomwire.com", "sportskeeda.com"]:
+        print("\n── Strategy 2: Rolling URLs ──")
+        for url in ROLLING_SOURCES:
+            print(f"  Trying {url} …")
+            result = try_parse(fetch(url), url, 'Rolling')
+            if result:
+                parsed = result
+                break
+
+    # ── Strategy 3: Site search for fresh article URLs ────────────────
+    if not parsed:
+        print("\n── Strategy 3: Site search ──")
+        for domain in ["techwiser.com", "fandomwire.com"]:
             url = find_fresh_url_via_rss(domain)
             if not url:
-                print(f"  [SKIP] No RSS URL found for {domain}")
+                print(f"  [SKIP] No URL found for {domain}")
                 continue
-            print(f"  RSS URL: {url}")
-            html = fetch(url)
-            if not html or len(html) < 1000:
-                continue
-            result = parse(html)
-            has_data = result.get('weekLabel') or result.get('bonuses') or result.get('discounts')
-            if has_data and is_fresh(result.get('weekLabel', ''), existing_label):
+            print(f"  Found: {url}")
+            result = try_parse(fetch(url), url, domain)
+            if result:
                 parsed = result
-                print(f"  ✓ Fresh via RSS! Week: '{result.get('weekLabel')}'")
                 break
-            elif has_data:
-                print(f"  [SKIP] RSS article also stale: '{result.get('weekLabel')}'")
-
-    # ── Strategy 3: PCQuest search ───────────────────────────────────
-    if not parsed:
-        print("\n── Strategy 3: PCQuest search ──")
-        month = now.strftime("%B").lower()
-        year = now.year
-        search_url = f"https://www.pcquest.com/gaming/?s=gta+online+weekly+update+{month}+{year}"
-        html = fetch(search_url)
-        if html:
-            urls = re.findall(r'href="(https://www.pcquest.com/gaming/gta-online-weekly-update[^"]+)"', html)
-            for url in urls[:3]:
-                print(f"  Trying PCQuest: {url}")
-                html2 = fetch(url)
-                if not html2 or len(html2) < 1000:
-                    continue
-                result = parse(html2)
-                has_data = result.get('bonuses') or result.get('discounts') or result.get('weekLabel')
-                if not has_data:
-                    continue
-                scraped_label = result.get('weekLabel', '')
-                # If weekLabel is empty, check URL for current month/year as proxy
-                if not scraped_label:
-                    now_month = now.strftime("%B").lower()[:3]
-                    url_fresh = now_month in url.lower() and str(now.year) in url
-                    if url_fresh:
-                        # Synthesize label from URL date pattern e.g. "april-16-to-22"
-                        url_dates = re.search(r'(\w+-\d+-to-\d+|\w+-\d+[-–]\d+)', url)
-                        if url_dates:
-                            raw = url_dates.group(1).replace('-', ' ').replace('to', '–')
-                            result['weekLabel'] = re.sub(r'(\w{3})\w*\s+(\d+)',
-                                lambda x: x.group(1).upper()+' '+x.group(2), raw).strip()
-                            scraped_label = result['weekLabel']
-                            print(f"  Synthesized weekLabel from URL: '{scraped_label}'")
-                if is_fresh(scraped_label, existing_label) or (has_data and not existing_label):
-                    parsed = result
-                    print(f"  ✓ Fresh via PCQuest! Week: '{scraped_label}'")
-                    break
-                else:
-                    print(f"  [SKIP] PCQuest stale: '{scraped_label}'")
-
     # ── No fresh data found ───────────────────────────────────────────
     if not parsed:
         print("\n[INFO] No fresh data found from any source.")
@@ -548,7 +610,13 @@ def main():
 
     # ── Merge with existing and save ──────────────────────────────────
     def pick(s, e):
-        if isinstance(s, list): return s if s else e
+        if isinstance(s, list):
+            if not s: return e
+            if not e: return s
+            # For lists, prefer whichever has more items
+            # (scraped might have fewer but be more current, so only prefer
+            # existing if it has significantly more items — 2x)
+            return s if len(s) >= max(1, len(e) // 2) else e
         if isinstance(s, dict): return s if any(s.values()) else e
         return s if s else e
 
