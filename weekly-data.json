@@ -1,30 +1,20 @@
 {
-  "_updated": "2026-04-17",
-  "weekLabel": "APR 16 – 22",
+  "_updated": "2026-04-23",
+  "weekLabel": "APR 23 2026",
   "challenge": {
-    "desc": "Complete five waves in the new Stoner Survival to earn the Sasquatch Outfit and $420,000",
-    "reward": "Sasquatch Outfit and $420,000"
+    "desc": "Win Hunting Pack (Get Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000",
+    "reward": "Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000."
   },
   "bonuses": [
     {
       "multiplier": 4,
-      "name": "Log in to receive the Black LD Organics Tee",
-      "note": ""
-    },
-    {
-      "multiplier": 4,
-      "name": "Peyote Plants return",
-      "note": ""
-    },
-    {
-      "multiplier": 3,
-      "name": "First Dose and Last Dose Missions",
-      "note": ""
+      "name": "Featured Series",
+      "note": "Hunting Pack (Get Lamar), Hunting Pack, Hunting Pack (Remix)"
     },
     {
       "multiplier": 2,
-      "name": "Short Trips",
-      "note": "Community Combat Series"
+      "name": "Counterfeit Cash Sell Missions",
+      "note": "Street Dealer Weed Sales - Community Race Series"
     }
   ],
   "newVehicles": [],
@@ -35,8 +25,7 @@
       "until": "",
       "items": [
         "Drinks at Nightclub Bars, The Diamond Casino, The Music Locker",
-        "Green Space Horror Suit",
-        "Green Tire Smoke",
+        "Smoke on the Water Money Front",
         "Vapid Festival Bus (down from $1,842,000 to $921,000)"
       ]
     },
@@ -45,7 +34,7 @@
       "category": "Various Vehicles",
       "until": "",
       "items": [
-        "Weed Farms including Upgrades"
+        "Counterfeit Cash Factories including Upgrades"
       ]
     },
     {
@@ -53,20 +42,22 @@
       "category": "Various Vehicles",
       "until": "",
       "items": [
-        "Buckingham Tug (down from $1,250,000 to $875,000)",
-        "Declasse Walton L35 (down from $1,670,000 to $1,169,000)",
-        "Gallivanter Baller ST (down from $890,000 to $623,000)",
-        "Gallivanter Baller ST-D (down from $1,715,000 to $1,200,000)",
-        "Imponte Nightshade (down from $585,000 to $409,000)",
-        "Nagasaki Ultralight (down from $665,000 to $465,000)",
-        "Pfister Neon (down from $1,500,000 to $1,050,000)",
-        "Shitzu Hakuchou Drag (down from $976,000 to $683,000)",
-        "Vapid Caracara 4x4 (down from $875,000 to $612,000)"
+        "Annis Hellion (down from $835,000 to $584,000)",
+        "Classique Broadway (down from $925,000 to $647,000)",
+        "Enus Deity (down from $1,845,000 to $1,291,000)",
+        "Grotti Cheetah (down from $650,000 to $455,000)",
+        "HVY Menacer (down from $1,775,000 to $1,242,000)",
+        "Kraken Avisa (down from $1,545,000 to $1,081,000)",
+        "Lampadati Corsita (down from $1,795,000 to $1,256,000)",
+        "Obey 8F Drafter (down from $718,000 to $502,000)",
+        "Progen Itali GTB (down from $1,189,000 to $832,000)",
+        "Vapid GB200 (down from $940,000 to $658,000)",
+        "Nightshade (down from $805,000 to $563,000)"
       ]
     }
   ],
-  "podium": "Pfister Growler",
-  "prizeRide": "",
+  "podium": "Vulcar Warrener HKR",
+  "prizeRide": "Truffade Adder",
   "salvage": [
     {
       "tier": 1,
@@ -91,13 +82,13 @@
   ],
   "gunVan": [
     {
-      "name": "Baseball Bat",
+      "name": "/  Baseball Bat",
       "deal": "FREE",
       "gtaPlus": false
     },
     {
-      "name": "Railgun",
-      "deal": "30% OFF",
+      "name": "Battle Rifle",
+      "deal": "50% OFF",
       "gtaPlus": false
     },
     {
@@ -109,15 +100,10 @@
       "name": "Body Armor",
       "deal": "70% OFF",
       "gtaPlus": true
-    },
-    {
-      "name": "Military Rifle",
-      "deal": "40% OFF",
-      "gtaPlus": true
     }
   ],
-  "fibFile": "Black Box File",
-  "mostWanted": [],
+  "fibFile": "Brute Force File",
+  "mostWanted": null,
   "carMeet": {
     "prizeRide": "",
     "prizeReq": "Top 5 in the LS Car Meet Series for 3 days",
