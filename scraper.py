@@ -606,34 +606,35 @@ def main():
             return None
         result = parse(html)
         scraped_label = result.get('weekLabel', '')
-        # Synthesize label from URL if empty (PCQuest "april-16-to-22" pattern)
+
+        # Synthesize label from URL if empty (PCQuest "april-23-2026" pattern)
         if not scraped_label and str(now.year) in url:
             now_month_abbr = now.strftime("%B").lower()[:3]
             if now_month_abbr in url.lower():
-                url_dates = re.search(r'(\w+(?:-\d+)+)', url.split('/')[-1])
-                if url_dates:
-                    raw = url_dates.group(1).replace('-', ' ').replace('to', ' – ')
-                    synthesized = re.sub(r'(\w{3})\w*\s+(\d+)',
-                        lambda x: x.group(1).upper()+' '+x.group(2), raw).strip()
-                   if synthesized:
-                                # Add end date if missing (PCQuest only has start date in URL)
-                                if ' – ' not in synthesized and re.search(r'\d+$', synthesized):
-                                    import datetime as _dt
-                                    try:
-                                        parts = synthesized.split()
-                                        month_map = {'JAN':1,'FEB':2,'MAR':3,'APR':4,'MAY':5,'JUN':6,'JUL':7,'AUG':8,'SEP':9,'OCT':10,'NOV':11,'DEC':12}
-                                        m_num = month_map.get(parts[0], now.month)
-                                        start = _dt.datetime(now.year, m_num, int(parts[1]))
-                                        end = start + _dt.timedelta(days=6)
-                                        end_str = str(end.day)
-                                        if end.month != start.month:
-                                            end_str = end.strftime('%b').upper() + ' ' + end_str
-                                        synthesized = f"{synthesized} – {end_str}"
-                                    except Exception:
-                                        pass
-                                result['weekLabel'] = synthesized
-                                scraped_label = synthesized
-                                print(f"  Synthesized label: '{scraped_label}'")
+                day_m = re.search(
+                    r'(january|february|march|april|may|june|july|august|september|october|november|december)-(\d+)-(\d{4})',
+                    url.lower()
+                )
+                if day_m:
+                    month_map = {
+                        'january':1,'february':2,'march':3,'april':4,
+                        'may':5,'june':6,'july':7,'august':8,
+                        'september':9,'october':10,'november':11,'december':12
+                    }
+                    month_num = month_map[day_m.group(1)]
+                    start_day = int(day_m.group(2))
+                    year_num  = int(day_m.group(3))
+                    import datetime as _dt
+                    start = _dt.datetime(year_num, month_num, start_day)
+                    end   = start + _dt.timedelta(days=6)
+                    end_str = str(end.day)
+                    if end.month != start.month:
+                        end_str = end.strftime('%b').upper() + ' ' + end_str
+                    synthesized = start.strftime('%b').upper() + ' ' + str(start_day) + ' \u2013 ' + end_str
+                    result['weekLabel'] = synthesized
+                    scraped_label = synthesized
+                    print(f"  Synthesized label: '{scraped_label}'")
+
         has_data = bool(result.get('bonuses') or result.get('discounts') or scraped_label)
         if not has_data:
             print(f"  [SKIP] No useful data")
@@ -648,6 +649,7 @@ def main():
         print(f"  ✓ Valid! Week:'{scraped_label}' — {reason}")
         return result
 
+    
     # ── Strategy 1: PCQuest (new URL every week — most reliable) ─────
     print("\n── Strategy 1: PCQuest (new URL per week) ──")
     pcq_month = now.strftime("%B").lower()
