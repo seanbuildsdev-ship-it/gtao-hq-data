@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 # ── Sources ───────────────────────────────────────────────────────────
 
 ROLLING_SOURCES = [
+    "https://rockstarintel.com/gta-online-event-week/",
     "https://techwiser.com/gta-online-weekly-update/",
     "https://www.sportskeeda.com/gta/gta-online-weekly-update",
     "https://www.dexerto.com/gta/gta-online-weekly-update-patch-notes-1498644/",
@@ -293,6 +294,7 @@ def parse(html):
     # Bonus Money — patterns cover TechWiser (Quadruple/Triple/Double) 
     # AND PCQuest (Get 4X GTA$, Get 3X GTA$, Get 2X GTA$)
     for mult, pattern in [
+        (10, r'(?:10[x×]|ten\s+times).*(?:money|bonus|reward|gta|rp)'),
         (4, r'(?:quadruple|4[x×]).*(?:money|bonus|reward|gta|rp)'),
         (3, r'(?:triple|3[x×]).*(?:money|bonus|reward|gta|rp)'),
         (2, r'(?:double|2[x×]).*(?:money|bonus|reward|gta|rp)'),
