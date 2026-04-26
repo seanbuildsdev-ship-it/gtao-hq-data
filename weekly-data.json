@@ -1,95 +1,77 @@
 {
-  "_updated": "2026-04-26",
+  "_updated": "2026-04-25",
   "weekLabel": "APR 23 – 29",
   "challenge": {
-    "desc": "Win Hunting Pack (Get Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000",
-    "reward": "Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000."
+    "desc": "Win Hunting Pack (Get Lamar) twice",
+    "reward": "Güffy Drug Rug Hoodie + GTA$100,000"
   },
   "bonuses": [
-    {
-      "multiplier": 4,
-      "name": "Featured Series",
-      "note": "Hunting Pack (Get Lamar), Hunting Pack, Hunting Pack (Remix)"
-    },
-    {
-      "multiplier": 2,
-      "name": "Counterfeit Cash Sell Missions",
-      "note": "Street Dealer Weed Sales - Community Race Series"
-    }
+    { "multiplier": 10, "name": "Smoke on the Water Legal Work",  "note": "420 Event finale — no combat, easy cash" },
+    { "multiplier": 4,  "name": "Hunting Pack (Get Lamar)",       "note": "Featured Series — 420 event" },
+    { "multiplier": 4,  "name": "Hunting Pack",                   "note": "Featured Series — 420 event" },
+    { "multiplier": 4,  "name": "Hunting Pack (Remix)",           "note": "Featured Series — 420 event" },
+    { "multiplier": 2,  "name": "Counterfeit Cash Sell Missions", "note": "Cash & RP" },
+    { "multiplier": 2,  "name": "Street Dealer Weed Sales",       "note": "Cash & RP" },
+    { "multiplier": 2,  "name": "Community Race Series",          "note": "Cash & RP" },
+    { "multiplier": 2,  "name": "Priority Files",                 "note": "The Brute Force File — double payouts" }
   ],
   "newVehicles": [],
   "discounts": [
-    {
-      "pct": 50,
-      "category": "Various Vehicles",
-      "until": "",
-      "items": [
-        "Drinks at Nightclub Bars, The Diamond Casino, The Music Locker",
-        "Smoke on the Water Money Front",
-        "Vapid Festival Bus (down from $1,842,000 to $921,000)"
-      ]
-    },
-    {
-      "pct": 40,
-      "category": "Various Vehicles",
-      "until": "",
-      "items": [
-        "Counterfeit Cash Factories including Upgrades"
-      ]
-    },
-    {
-      "pct": 30,
-      "category": "Various Vehicles",
-      "until": "",
-      "items": [
-        "Annis Hellion (down from $835,000 to $584,000)",
-        "Classique Broadway (down from $925,000 to $647,000)",
-        "Enus Deity (down from $1,845,000 to $1,291,000)",
-        "Grotti Cheetah (down from $650,000 to $455,000)",
-        "HVY Menacer (down from $1,775,000 to $1,242,000)",
-        "Kraken Avisa (down from $1,545,000 to $1,081,000)",
-        "Lampadati Corsita (down from $1,795,000 to $1,256,000)",
-        "Obey 8F Drafter (down from $718,000 to $502,000)",
-        "Progen Itali GTB (down from $1,189,000 to $832,000)",
-        "Vapid GB200 (down from $940,000 to $658,000)",
-        "Nightshade (down from $805,000 to $563,000)"
-      ]
-    }
+    { "pct": 50, "category": "420 Event Items", "until": "April 29", "items": [
+      "Drinks at Nightclub Bars",
+      "Drinks at The Diamond Casino",
+      "Drinks at The Music Locker",
+      "Smoke on the Water Money Front",
+      "Vapid Festival Bus"
+    ]},
+    { "pct": 40, "category": "Counterfeit Cash Factories", "until": "", "items": [
+      "Properties, Upgrades & Modifications"
+    ]},
+    { "pct": 30, "category": "Various Vehicles", "until": "", "items": [
+      "Annis Hellion", "Classique Broadway", "Enus Deity", "Grotti Cheetah",
+      "HVY Menacer", "Kraken Avisa", "Lampadati Corsita",
+      "Obey 8F Drafter", "Progen Itali GTB", "Vapid GB200"
+    ]}
   ],
   "podium": "Vulcar Warrener HKR",
   "prizeRide": "Truffade Adder",
-  "salvage": [],
-  "gunVan": [
-    {
-      "name": "/  Baseball Bat",
-      "deal": "FREE",
-      "gtaPlus": false
-    },
-    {
-      "name": "Battle Rifle",
-      "deal": "50% OFF",
-      "gtaPlus": false
-    },
-    {
-      "name": "Stun Gun",
-      "deal": "FREE",
-      "gtaPlus": true
-    },
-    {
-      "name": "Body Armor",
-      "deal": "70% OFF",
-      "gtaPlus": true
-    }
+  "salvage": [
+    { "tier": 1, "robbery": "The Gangbanger Robbery", "car": "Dewbauchee Vagner"          },
+    { "tier": 2, "robbery": "The McTony Robbery",     "car": "Karin Everon"               },
+    { "tier": 3, "robbery": "The Duggan Robbery",     "car": "Übermacht Sentinel Classic"  }
   ],
-  "fibFile": "Brute Force File",
-  "mostWanted": [],
+  "gunVan": [
+    { "name": "Baseball Bat",    "deal": "FREE",    "gtaPlus": false },
+    { "name": "Battle Rifle",    "deal": "50% OFF", "gtaPlus": false },
+    { "name": "Stun Gun",        "deal": "FREE",    "gtaPlus": true  },
+    { "name": "Body Armor",      "deal": "70% OFF", "gtaPlus": true  },
+    { "name": "Precision Rifle", "deal": "10% OFF", "gtaPlus": false },
+    { "name": "Homing Launcher", "deal": "10% OFF", "gtaPlus": false },
+    { "name": "Pistol .50",      "deal": "FREE",    "gtaPlus": true  },
+    { "name": "Pipe Bombs",      "deal": "10% OFF", "gtaPlus": false },
+    { "name": "Tear Gas",        "deal": "10% OFF", "gtaPlus": false },
+    { "name": "Proximity Mines", "deal": "10% OFF", "gtaPlus": false }
+  ],
+  "fibFile": "The Brute Force File",
+  "mostWanted": [
+    { "date": "Apr 23", "name": "Cleo Song",      "reward": "$127,000" },
+    { "date": "Apr 24", "name": "Brock Thompson", "reward": "$123,000" },
+    { "date": "Apr 25", "name": "Chaz Lieberman", "reward": "$130,000" },
+    { "date": "Apr 26", "name": "Grace Whitney",  "reward": "$126,000" },
+    { "date": "Apr 27", "name": "Cleo Song",      "reward": "$123,000" },
+    { "date": "Apr 28", "name": "Leroy O'Neil",   "reward": "$129,000" },
+    { "date": "Apr 29", "name": "Chaz Lieberman", "reward": "$126,000" },
+    { "date": "Apr 30", "name": "Omar Garcia",    "reward": "$122,000" },
+    { "date": "May 1",  "name": "Cleo Song",      "reward": "$128,000" },
+    { "date": "May 2",  "name": "Leroy O'Neil",   "reward": "$125,000" }
+  ],
   "carMeet": {
-    "prizeRide": "",
-    "prizeReq": "",
-    "premiumTest": "",
-    "premiumTestNote": "",
-    "testRides": [],
-    "luxuryAutos": [],
-    "pdm": []
+    "prizeRide": "Truffade Adder",
+    "prizeReq": "Top 2 in LS Car Meet Series × 4 days in a row",
+    "premiumTest": "Declasse Vigero ZX",
+    "premiumTestNote": "HSW / PS5, Xbox Series X|S & PC Enhanced only",
+    "testRides": ["Coil Voltic", "Grotti GT500", "Vapid Blade"],
+    "luxuryAutos": ["Declasse Walton L35 Stock", "Grotti LSCM Cheetah Classic"],
+    "pdm": ["Dewbauchee Seven-70", "Dundreary Landstalker XL", "LCC Avarus", "Ocelot Locust", "Vapid Retinue"]
   }
 }
