@@ -1,1 +1,95 @@
-
+{
+  "_updated": "2026-04-26",
+  "weekLabel": "APR 23 – 29",
+  "challenge": {
+    "desc": "Win Hunting Pack (Get Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000",
+    "reward": "Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000."
+  },
+  "bonuses": [
+    {
+      "multiplier": 4,
+      "name": "Featured Series",
+      "note": "Hunting Pack (Get Lamar), Hunting Pack, Hunting Pack (Remix)"
+    },
+    {
+      "multiplier": 2,
+      "name": "Counterfeit Cash Sell Missions",
+      "note": "Street Dealer Weed Sales - Community Race Series"
+    }
+  ],
+  "newVehicles": [],
+  "discounts": [
+    {
+      "pct": 50,
+      "category": "Various Vehicles",
+      "until": "",
+      "items": [
+        "Drinks at Nightclub Bars, The Diamond Casino, The Music Locker",
+        "Smoke on the Water Money Front",
+        "Vapid Festival Bus (down from $1,842,000 to $921,000)"
+      ]
+    },
+    {
+      "pct": 40,
+      "category": "Various Vehicles",
+      "until": "",
+      "items": [
+        "Counterfeit Cash Factories including Upgrades"
+      ]
+    },
+    {
+      "pct": 30,
+      "category": "Various Vehicles",
+      "until": "",
+      "items": [
+        "Annis Hellion (down from $835,000 to $584,000)",
+        "Classique Broadway (down from $925,000 to $647,000)",
+        "Enus Deity (down from $1,845,000 to $1,291,000)",
+        "Grotti Cheetah (down from $650,000 to $455,000)",
+        "HVY Menacer (down from $1,775,000 to $1,242,000)",
+        "Kraken Avisa (down from $1,545,000 to $1,081,000)",
+        "Lampadati Corsita (down from $1,795,000 to $1,256,000)",
+        "Obey 8F Drafter (down from $718,000 to $502,000)",
+        "Progen Itali GTB (down from $1,189,000 to $832,000)",
+        "Vapid GB200 (down from $940,000 to $658,000)",
+        "Nightshade (down from $805,000 to $563,000)"
+      ]
+    }
+  ],
+  "podium": "Vulcar Warrener HKR",
+  "prizeRide": "Truffade Adder",
+  "salvage": [],
+  "gunVan": [
+    {
+      "name": "/  Baseball Bat",
+      "deal": "FREE",
+      "gtaPlus": false
+    },
+    {
+      "name": "Battle Rifle",
+      "deal": "50% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Stun Gun",
+      "deal": "FREE",
+      "gtaPlus": true
+    },
+    {
+      "name": "Body Armor",
+      "deal": "70% OFF",
+      "gtaPlus": true
+    }
+  ],
+  "fibFile": "Brute Force File",
+  "mostWanted": [],
+  "carMeet": {
+    "prizeRide": "",
+    "prizeReq": "",
+    "premiumTest": "",
+    "premiumTestNote": "",
+    "testRides": [],
+    "luxuryAutos": [],
+    "pdm": []
+  }
+}
