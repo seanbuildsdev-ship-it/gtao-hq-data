@@ -15,7 +15,6 @@ from bs4 import BeautifulSoup
 ROLLING_SOURCES = [
     "https://rockstarintel.com/gta-online-event-week/",
     "https://techwiser.com/gta-online-weekly-update/",
-    "https://www.sportskeeda.com/gta/gta-online-weekly-update",
     "https://www.dexerto.com/gta/gta-online-weekly-update-patch-notes-1498644/",
 ]
 
@@ -126,8 +125,12 @@ def is_data_actually_new(scraped, stored):
 
     # Same week label = not new
     if scraped_label and stored_label and norm(scraped_label) == norm(stored_label):
-        return False, "Same week label"
-
+# Bonuses differ? Let it through to update
+            s_names = {b.get('name','') for b in scraped.get('bonuses',[])}
+            e_names = {b.get('name','') for b in stored.get('bonuses',[])}
+            if s_names and s_names != e_names:
+                return True, "Same week but bonuses differ"
+            return False, "Same week, data unchanged"
     checks_passed, checks_total = 0, 0
 
     if scraped.get('podium') and stored.get('podium'):
@@ -612,10 +615,25 @@ def main():
                     raw = url_dates.group(1).replace('-', ' ').replace('to', ' – ')
                     synthesized = re.sub(r'(\w{3})\w*\s+(\d+)',
                         lambda x: x.group(1).upper()+' '+x.group(2), raw).strip()
-                    if synthesized:
-                        result['weekLabel'] = synthesized
-                        scraped_label = synthesized
-                        print(f"  Synthesized label: '{scraped_label}'")
+                   if synthesized:
+                                # Add end date if missing (PCQuest only has start date in URL)
+                                if ' – ' not in synthesized and re.search(r'\d+$', synthesized):
+                                    import datetime as _dt
+                                    try:
+                                        parts = synthesized.split()
+                                        month_map = {'JAN':1,'FEB':2,'MAR':3,'APR':4,'MAY':5,'JUN':6,'JUL':7,'AUG':8,'SEP':9,'OCT':10,'NOV':11,'DEC':12}
+                                        m_num = month_map.get(parts[0], now.month)
+                                        start = _dt.datetime(now.year, m_num, int(parts[1]))
+                                        end = start + _dt.timedelta(days=6)
+                                        end_str = str(end.day)
+                                        if end.month != start.month:
+                                            end_str = end.strftime('%b').upper() + ' ' + end_str
+                                        synthesized = f"{synthesized} – {end_str}"
+                                    except Exception:
+                                        pass
+                                result['weekLabel'] = synthesized
+                                scraped_label = synthesized
+                                print(f"  Synthesized label: '{scraped_label}'")
         has_data = bool(result.get('bonuses') or result.get('discounts') or scraped_label)
         if not has_data:
             print(f"  [SKIP] No useful data")
@@ -667,12 +685,16 @@ def main():
             if result:
                 parsed = result
                 break
-    # ── No fresh data found ───────────────────────────────────────────
+  # ── No fresh data found ───────────────────────────────────────────
     if not parsed:
-        print("\n[INFO] No fresh data found from any source.")
-        print("       Sites may not have published the new week yet.")
-        print("       The cron will retry at 13:00 and 16:00 UTC today.")
-        sys.exit(0)  # Clean exit — don't fail the action, just retry later
+        if existing_label and is_current_week(existing_label):
+            print(f"\n[INFO] Stored '{existing_label}' is already current week — supplementing gaps only")
+            parsed = dict(existing)
+        else:
+            print("\n[INFO] No fresh data found from any source.")
+            print("       Sites may not have published the new week yet.")
+            print("       The cron will retry at 13:00 and 16:00 UTC today.")
+            sys.exit(0)  # Clean exit — don't fail the action, just retry later
 
     # ── Supplement missing fields from Fandomwire ───────────────────
     print("\n── Supplementing from Fandomwire ──")
