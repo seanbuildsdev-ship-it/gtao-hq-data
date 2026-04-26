@@ -15,16 +15,6 @@
       "multiplier": 2,
       "name": "Counterfeit Cash Sell Missions",
       "note": "Street Dealer Weed Sales - Community Race Series"
-    },
-    {
-      "multiplier": 10,
-      "name": "Money",
-      "note": "Event bonus"
-    },
-    {
-      "multiplier": 10,
-      "name": "Rewards",
-      "note": "Event bonus"
     }
   ],
   "newVehicles": [],
