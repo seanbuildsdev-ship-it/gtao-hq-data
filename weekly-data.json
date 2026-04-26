@@ -1,9 +1,9 @@
 {
-  "_updated": "2026-04-25",
+  "_updated": "2026-04-26",
   "weekLabel": "APR 23 – 29",
   "challenge": {
-    "desc": "Win Hunting Pack (Get Lamar) twice",
-    "reward": "Güffy Drug Rug Hoodie + GTA$100,000"
+    "desc": "Win Hunting Pack (Get Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000",
+    "reward": "Lamar) twice to receive the Güffy Drug Rug Hoodie and GTA$100,000."
   },
   "bonuses": [
     {
@@ -51,22 +51,20 @@
   "discounts": [
     {
       "pct": 50,
-      "category": "420 Event Items",
-      "until": "April 29",
+      "category": "Various Vehicles",
+      "until": "",
       "items": [
-        "Drinks at Nightclub Bars",
-        "Drinks at The Diamond Casino",
-        "Drinks at The Music Locker",
+        "Drinks at Nightclub Bars, The Diamond Casino, The Music Locker",
         "Smoke on the Water Money Front",
-        "Vapid Festival Bus"
+        "Vapid Festival Bus (down from $1,842,000 to $921,000)"
       ]
     },
     {
       "pct": 40,
-      "category": "Counterfeit Cash Factories",
+      "category": "Various Vehicles",
       "until": "",
       "items": [
-        "Properties, Upgrades & Modifications"
+        "Counterfeit Cash Factories including Upgrades"
       ]
     },
     {
@@ -74,16 +72,17 @@
       "category": "Various Vehicles",
       "until": "",
       "items": [
-        "Annis Hellion",
-        "Classique Broadway",
-        "Enus Deity",
-        "Grotti Cheetah",
-        "HVY Menacer",
-        "Kraken Avisa",
-        "Lampadati Corsita",
-        "Obey 8F Drafter",
-        "Progen Itali GTB",
-        "Vapid GB200"
+        "Annis Hellion (down from $835,000 to $584,000)",
+        "Classique Broadway (down from $925,000 to $647,000)",
+        "Enus Deity (down from $1,845,000 to $1,291,000)",
+        "Grotti Cheetah (down from $650,000 to $455,000)",
+        "HVY Menacer (down from $1,775,000 to $1,242,000)",
+        "Kraken Avisa (down from $1,545,000 to $1,081,000)",
+        "Lampadati Corsita (down from $1,795,000 to $1,256,000)",
+        "Obey 8F Drafter (down from $718,000 to $502,000)",
+        "Progen Itali GTB (down from $1,189,000 to $832,000)",
+        "Vapid GB200 (down from $940,000 to $658,000)",
+        "Nightshade (down from $805,000 to $563,000)"
       ]
     }
   ],
@@ -108,7 +107,7 @@
   ],
   "gunVan": [
     {
-      "name": "Baseball Bat",
+      "name": "/  Baseball Bat",
       "deal": "FREE",
       "gtaPlus": false
     },
@@ -128,7 +127,7 @@
       "gtaPlus": true
     }
   ],
-  "fibFile": "The Brute Force File",
+  "fibFile": "Brute Force File",
   "mostWanted": [
     {
       "date": "Apr 23",
