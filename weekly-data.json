@@ -1,77 +1,146 @@
 {
-  "_updated": "2026-04-25",
-  "weekLabel": "APR 23 – 29",
+  "_updated": "2026-04-30",
+  "weekLabel": "APR 30 – MAY 6",
   "challenge": {
-    "desc": "Win Hunting Pack (Get Lamar) twice",
-    "reward": "Güffy Drug Rug Hoodie + GTA$100,000"
+    "desc": "Complete \"Old School Hits\" to receive $100,000 (PS5, Xbox Series X/S, PC Enhanced only)",
+    "reward": "$100,000 (PS5, Xbox Series X/S, PC Enhanced only)."
   },
   "bonuses": [
-    { "multiplier": 10, "name": "Smoke on the Water Legal Work",  "note": "420 Event finale — no combat, easy cash" },
-    { "multiplier": 4,  "name": "Hunting Pack (Get Lamar)",       "note": "Featured Series — 420 event" },
-    { "multiplier": 4,  "name": "Hunting Pack",                   "note": "Featured Series — 420 event" },
-    { "multiplier": 4,  "name": "Hunting Pack (Remix)",           "note": "Featured Series — 420 event" },
-    { "multiplier": 2,  "name": "Counterfeit Cash Sell Missions", "note": "Cash & RP" },
-    { "multiplier": 2,  "name": "Street Dealer Weed Sales",       "note": "Cash & RP" },
-    { "multiplier": 2,  "name": "Community Race Series",          "note": "Cash & RP" },
-    { "multiplier": 2,  "name": "Priority Files",                 "note": "The Brute Force File — double payouts" }
+    {
+      "multiplier": 4,
+      "name": "Community Mission Series",
+      "note": "Pays four times the normal rewards on PS5, Xbox Series X/S, "
+    },
+    {
+      "multiplier": 4,
+      "name": "Madrazo Hits",
+      "note": "Pay double money and RP, but GTA+ members get quadruple mone"
+    },
+    {
+      "multiplier": 3,
+      "name": "Payphone Hits",
+      "note": "Franklin's assassination contracts offer exceptional payouts"
+    },
+    {
+      "multiplier": 3,
+      "name": "Time Trials",
+      "note": "Test your driving skills against the clock for increased rew"
+    },
+    {
+      "multiplier": 3,
+      "name": "Open Wheel Races",
+      "note": "These Formula 1-style races require precision driving and pi"
+    },
+    {
+      "multiplier": 2,
+      "name": "Community Race Series",
+      "note": "Pays double money and RP on PS4, Xbox One, and PC Legacy pla"
+    }
   ],
   "newVehicles": [],
   "discounts": [
-    { "pct": 50, "category": "420 Event Items", "until": "April 29", "items": [
-      "Drinks at Nightclub Bars",
-      "Drinks at The Diamond Casino",
-      "Drinks at The Music Locker",
-      "Smoke on the Water Money Front",
-      "Vapid Festival Bus"
-    ]},
-    { "pct": 40, "category": "Counterfeit Cash Factories", "until": "", "items": [
-      "Properties, Upgrades & Modifications"
-    ]},
-    { "pct": 30, "category": "Various Vehicles", "until": "", "items": [
-      "Annis Hellion", "Classique Broadway", "Enus Deity", "Grotti Cheetah",
-      "HVY Menacer", "Kraken Avisa", "Lampadati Corsita",
-      "Obey 8F Drafter", "Progen Itali GTB", "Vapid GB200"
-    ]}
+    {
+      "pct": 30,
+      "category": "Vehicles",
+      "until": "",
+      "items": []
+    }
   ],
-  "podium": "Vulcar Warrener HKR",
-  "prizeRide": "Truffade Adder",
+  "podium": "Zirconium Journey II",
+  "prizeRide": "Vapid Uranus LozSpeed",
   "salvage": [
-    { "tier": 1, "robbery": "The Gangbanger Robbery", "car": "Dewbauchee Vagner"          },
-    { "tier": 2, "robbery": "The McTony Robbery",     "car": "Karin Everon"               },
-    { "tier": 3, "robbery": "The Duggan Robbery",     "car": "Übermacht Sentinel Classic"  }
+    {
+      "tier": 1,
+      "robbery": "The Gangbanger Robbery",
+      "car": "Dewbauchee Vagner"
+    },
+    {
+      "tier": 2,
+      "robbery": "The McTony Robbery",
+      "car": "Karin Everon"
+    },
+    {
+      "tier": 3,
+      "robbery": "The Duggan Robbery",
+      "car": "Übermacht Sentinel Classic"
+    }
   ],
   "gunVan": [
-    { "name": "Baseball Bat",    "deal": "FREE",    "gtaPlus": false },
-    { "name": "Battle Rifle",    "deal": "50% OFF", "gtaPlus": false },
-    { "name": "Stun Gun",        "deal": "FREE",    "gtaPlus": true  },
-    { "name": "Body Armor",      "deal": "70% OFF", "gtaPlus": true  },
-    { "name": "Precision Rifle", "deal": "10% OFF", "gtaPlus": false },
-    { "name": "Homing Launcher", "deal": "10% OFF", "gtaPlus": false },
-    { "name": "Pistol .50",      "deal": "FREE",    "gtaPlus": true  },
-    { "name": "Pipe Bombs",      "deal": "10% OFF", "gtaPlus": false },
-    { "name": "Tear Gas",        "deal": "10% OFF", "gtaPlus": false },
-    { "name": "Proximity Mines", "deal": "10% OFF", "gtaPlus": false }
+    {
+      "name": "Baseball Bat",
+      "deal": "FREE",
+      "gtaPlus": false
+    },
+    {
+      "name": "Battle Rifle",
+      "deal": "50% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Stun Gun",
+      "deal": "FREE",
+      "gtaPlus": true
+    },
+    {
+      "name": "Body Armor",
+      "deal": "70% OFF",
+      "gtaPlus": true
+    },
+    {
+      "name": "Precision Rifle",
+      "deal": "10% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Homing Launcher",
+      "deal": "10% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Pistol .50",
+      "deal": "FREE",
+      "gtaPlus": true
+    },
+    {
+      "name": "Pipe Bombs",
+      "deal": "10% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Tear Gas",
+      "deal": "10% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Proximity Mines",
+      "deal": "10% OFF",
+      "gtaPlus": false
+    }
   ],
-  "fibFile": "The Brute Force File",
-  "mostWanted": [
-    { "date": "Apr 23", "name": "Cleo Song",      "reward": "$127,000" },
-    { "date": "Apr 24", "name": "Brock Thompson", "reward": "$123,000" },
-    { "date": "Apr 25", "name": "Chaz Lieberman", "reward": "$130,000" },
-    { "date": "Apr 26", "name": "Grace Whitney",  "reward": "$126,000" },
-    { "date": "Apr 27", "name": "Cleo Song",      "reward": "$123,000" },
-    { "date": "Apr 28", "name": "Leroy O'Neil",   "reward": "$129,000" },
-    { "date": "Apr 29", "name": "Chaz Lieberman", "reward": "$126,000" },
-    { "date": "Apr 30", "name": "Omar Garcia",    "reward": "$122,000" },
-    { "date": "May 1",  "name": "Cleo Song",      "reward": "$128,000" },
-    { "date": "May 2",  "name": "Leroy O'Neil",   "reward": "$125,000" }
-  ],
+  "fibFile": "Fine Art File",
+  "mostWanted": null,
   "carMeet": {
-    "prizeRide": "Truffade Adder",
-    "prizeReq": "Top 2 in LS Car Meet Series × 4 days in a row",
+    "prizeRide": "Vapid Uranus LozSpeed",
+    "prizeReq": "Top 2 in the LS Car Meet Series for four days in a row",
     "premiumTest": "Declasse Vigero ZX",
     "premiumTestNote": "HSW / PS5, Xbox Series X|S & PC Enhanced only",
-    "testRides": ["Coil Voltic", "Grotti GT500", "Vapid Blade"],
-    "luxuryAutos": ["Declasse Walton L35 Stock", "Grotti LSCM Cheetah Classic"],
-    "pdm": ["Dewbauchee Seven-70", "Dundreary Landstalker XL", "LCC Avarus", "Ocelot Locust", "Vapid Retinue"]
+    "testRides": [
+      "Karin S95",
+      "Karin S95",
+      "Test Vehicles",
+      "Canis Seminole Frontier",
+      "Dinka Jester"
+    ],
+    "luxuryAutos": [
+      "Annis Minimus (with new Big Minimus Energy livery)",
+      "Karin Woodlander"
+    ],
+    "pdm": [
+      "Declasse DR1 (Open Wheel, 30% off)",
+      "Declasse Tulip",
+      "Pegassi Torero XO",
+      "Progen PR4 (Open Wheel, 30% off)",
+      "Übermacht Sentinel XS4"
+    ]
   }
 }
