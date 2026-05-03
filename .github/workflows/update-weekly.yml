@@ -28,6 +28,6 @@ jobs:
         run: |
           git config user.name  "gtao-hq-bot"
           git config user.email "bot@gtao-hq"
-          git add weekly-data.json
+          git add weekly-data.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "Weekly update $(date -u '+%Y-%m-%d %H:%M')"
           git push origin main
