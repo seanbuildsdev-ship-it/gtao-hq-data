@@ -1,12 +1,41 @@
 #!/usr/bin/env python3
 """
-GTA Online HQ — Weekly Data Scraper v6.1 (FIXED)
-- PCQuest first (new URL every week)
-- Fandomwire supplement (constructed URL — no scraping search pages)
-- Freshness + quality validation
-- 10x bonus support
-- ✓ FIXED: Most Wanted section scoping
-- ✓ FIXED: Car Meet inline markdown parsing
+GTA Online HQ — Weekly Data Scraper v6.2 (COMPLETE FIXED VERSION)
+
+✓ Fixed: Most Wanted section scoping (was pulling stale sidebar data)
+✓ Fixed: Car Meet inline markdown parsing (Fandomwire uses **text:** format)
+✓ Fixed: Salvage Yard strict section boundaries (avoids cache/archive pollution)
+✓ Improved: Better debugging output for troubleshooting
+
+Strategy Stack:
+1. PCQuest (searches for latest weekly articles)
+2. Rolling URLs (TechWiser, RockstarIntel, Dexerto)
+3. Fandomwire direct (constructed URL based on current week)
+4. Fandomwire supplement (fills gaps from primary sources)
+
+Data Quality Checks:
+- Freshness validation (must match current GTA week)
+- Salvage yard canary check (detects mid-update ghost data)
+- Podium/Prize Ride comparison
+- Bonus list consistency
+
+Output: weekly-data.json with structure:
+{
+  "weekLabel": "APR 30 – MAY 6",
+  "challenge": { "desc": "...", "reward": "..." },
+  "bonuses": [...],
+  "salvage": [{"tier": 1-3, "robbery": "...", "car": "..."}, ...],
+  "mostWanted": [{"name": "...", "date": "Apr 30", "reward": "$..."}, ...],
+  "carMeet": {
+    "testRides": [...],
+    "luxuryAutos": [...],
+    "pdm": [...],
+    "premiumTest": "...",
+    "prizeRide": "...",
+    ...
+  },
+  ...
+}
 """
 import json, re, sys, datetime, urllib.parse
 import requests
@@ -43,8 +72,7 @@ def ordinal(n):
 
 def find_fandomwire_url(now):
     """
-    Construct Fandomwire URL directly from the current GTA week dates.
-    Fandomwire uses Thursday-to-next-Thursday (7 days).
+    Construct Fandomwire URL from current GTA week (Thursday to Thursday).
     Pattern: gta-online-weekly-update-april-23rd-30th-2026/
     """
     days_since_thursday = (now.weekday() - 3) % 7
@@ -101,7 +129,7 @@ def is_fresh(scraped_label, stored_label):
     return True
 
 def is_data_actually_new(scraped, stored):
-    """Check that key fields actually changed."""
+    """Check that key fields actually changed (avoid mid-update ghost data)."""
     scraped_label = scraped.get('weekLabel', '')
     stored_label  = stored.get('weekLabel', '')
     norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
@@ -145,7 +173,7 @@ def is_data_actually_new(scraped, stored):
 
 # ── HTML section helpers ──────────────────────────────────────────────
 def get_section_items(soup, pattern, include_paragraphs=True):
-    """Find heading matching pattern, return li items until next heading."""
+    """Find heading matching pattern, return list items until next heading."""
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         if not re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
             continue
@@ -171,7 +199,7 @@ def get_section_items(soup, pattern, include_paragraphs=True):
     return []
 
 def get_section_text(soup, pattern):
-    """Get full text of a section (heading to next heading)."""
+    """Get full text of a section (heading to next heading of same level)."""
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         if not re.search(pattern, heading.get_text(strip=True), re.IGNORECASE):
             continue
@@ -192,20 +220,117 @@ def get_section_text(soup, pattern):
 def clean(s):
     return re.sub(r'\s+', ' ', (s or '').replace('*', '')).strip()
 
+# ── FIXED: Strict Salvage Yard parsing ────────────────────────────────
 def salvage_tier(name):
+    """Determine tier (1=low, 2=mid, 3=top) based on robbery type."""
     n = name.lower()
-    if re.search(r'cargo|ship|duggan|podium', n): return 3
-    if re.search(r'mctony', n):                   return 2
-    if re.search(r'gangbanger', n):               return 1
+    if re.search(r'mctony|podium', n):           return 3  # Top tier
+    if re.search(r'duggan', n):                  return 2  # Mid tier
+    if re.search(r'gangbanger', n):              return 1  # Low tier
     return 2
 
-# ── NEW FIX: Car Meet inline markdown parsing ─────────────────────────
+def parse_salvage_strict(soup, full_text):
+    """
+    Extract Salvage Yard robberies with strict section scoping.
+    Avoids pulling stale sidebar/archive data.
+    
+    Strategy stack:
+    1. Look for explicit "Salvage Yard Robberies" heading
+    2. Search "All Weekly Vehicle Updates" section (Fandomwire structure)
+    3. Last-resort regex with boundary awareness
+    """
+    salvage = []
+    
+    # Strategy 1: Most specific — dedicated section
+    salvage_text = None
+    for heading in soup.find_all(['h2', 'h3', 'h4']):
+        heading_text = heading.get_text(strip=True)
+        if re.search(r'Salvage\s+Yard\s+Robberies?|Salvage\s+Yard(?:\s+Targets)?', heading_text, re.IGNORECASE):
+            level = int(heading.name[1])
+            parts = []
+            for el in heading.find_all_next():
+                if el.name in ['h1', 'h2', 'h3', 'h4'] and int(el.name[1]) <= level:
+                    break
+                text = el.get_text(separator=' ', strip=True)
+                if text and len(text) > 2:
+                    parts.append(text)
+            salvage_text = '\n'.join(parts[:100])  # Limit to 100 lines to avoid noise
+            print(f"  [Salvage] Found 'Salvage Yard Robberies' section ({len(parts)} lines)")
+            break
+    
+    # Strategy 2: Fallback to vehicle updates section (common on Fandomwire)
+    if not salvage_text:
+        for heading in soup.find_all(['h2', 'h3']):
+            heading_text = heading.get_text(strip=True)
+            if re.search(r'(?:All\s+)?Weekly\s+Vehicle\s+Updates|New\s+Vehicle', heading_text, re.IGNORECASE):
+                level = int(heading.name[1])
+                parts = []
+                for el in heading.find_all_next():
+                    if el.name in ['h1', 'h2', 'h3', 'h4'] and int(el.name[1]) <= level:
+                        break
+                    text = el.get_text(separator=' ', strip=True)
+                    if text and len(text) > 2:
+                        parts.append(text)
+                salvage_text = '\n'.join(parts[:200])
+                print(f"  [Salvage] Found in 'Weekly Vehicle Updates' section ({len(parts)} lines)")
+                break
+    
+    # Strategy 3: Regex with boundary markers (stops before next section)
+    if not salvage_text:
+        m = re.search(
+            r'Salvage\s+Yard.*?(?=\n\n|\bPodium\b|\bShowroom\b|\bDiscounts\b|$)',
+            full_text,
+            re.IGNORECASE | re.DOTALL
+        )
+        if m:
+            salvage_text = m.group(0)
+            print(f"  [Salvage] Extracted from full text via regex (fallback)")
+    
+    if not salvage_text:
+        print(f"  [Salvage] No section found")
+        return salvage
+    
+    # Parse robberies using two patterns (normal and parenthetical formats)
+    robbery_patterns = [
+        r'(?:The\s+)?(\w+(?:\s+\w+)?)\s+Robbery[:\s]+([A-Z][A-Za-z\s]+?)(?:\n|·|,|\(|$)',
+        r'([A-Z][A-Za-z\s]+?)\s*\((?:The\s+)?(\w+(?:\s+\w+)?)\s+Robbery\)',
+    ]
+    
+    seen = set()
+    for pattern in robbery_patterns:
+        for m in re.finditer(pattern, salvage_text, re.MULTILINE):
+            if pattern == robbery_patterns[0]:
+                robbery_type = m.group(1).strip()
+                car = m.group(2).strip()
+            else:
+                car = m.group(1).strip()
+                robbery_type = m.group(2).strip()
+            
+            if not robbery_type.lower().endswith('robbery'):
+                robbery_name = f"The {robbery_type} Robbery"
+            else:
+                robbery_name = f"The {robbery_type}" if not robbery_type.startswith('The') else robbery_type
+            
+            if not (2 < len(car) < 60 and 3 < len(robbery_type) < 30):
+                continue
+            
+            key = (robbery_name, car)
+            if key in seen:
+                continue
+            seen.add(key)
+            
+            tier = salvage_tier(robbery_name)
+            salvage.append({'tier': tier, 'robbery': robbery_name, 'car': car})
+            print(f"  [Salvage] Found: {robbery_name} → {car}")
+    
+    salvage.sort(key=lambda x: x['tier'])
+    return salvage
+
+# ── FIXED: Car Meet inline markdown parsing ───────────────────────────
 def extract_car_meet_from_inline(full_text):
     """
-    Parse Car Meet data from inline markdown patterns like:
-    **Premium Test Ride:** Karin S95 (PS5, Xbox Series X|S, and PC Enhanced exclusive)
-    **Test Ride 1:** Dinka Jester
-    etc.
+    Parse Car Meet data from inline markdown patterns.
+    Fandomwire uses: **Premium Test Ride:** name, **Test Ride 1:** name, etc.
     """
     car_meet = {
         "prizeRide": "",
@@ -220,15 +345,13 @@ def extract_car_meet_from_inline(full_text):
     # Premium Test Ride + note
     m = re.search(
         r'\*\*Premium\s+Test\s+Ride[:\s]+\*\*\s*([A-Z][A-Za-z\s]+?)(?:\s*\(|$)',
-        full_text,
-        re.IGNORECASE
+        full_text, re.IGNORECASE
     )
     if m:
         car_meet['premiumTest'] = m.group(1).strip()
         note_m = re.search(
             r'\*\*Premium\s+Test\s+Ride[:\s]+\*\*\s*[A-Z][A-Za-z\s]+?\s*\(([^)]+)\)',
-            full_text,
-            re.IGNORECASE
+            full_text, re.IGNORECASE
         )
         if note_m:
             car_meet['premiumTestNote'] = note_m.group(1).strip()
@@ -237,8 +360,7 @@ def extract_car_meet_from_inline(full_text):
     test_rides = []
     for m in re.finditer(
         r'\*\*Test\s+(?:Ride|Track)\s+\d+[:\s]+\*\*\s*([A-Z][A-Za-z\s]+?)(?:\n|\*\*|$)',
-        full_text,
-        re.IGNORECASE
+        full_text, re.IGNORECASE
     ):
         ride = m.group(1).strip()
         if 2 < len(ride) < 60 and ride.lower() not in ('test rides', 'test vehicles'):
@@ -248,8 +370,7 @@ def extract_car_meet_from_inline(full_text):
     # Luxury Autos
     la_m = re.search(
         r'\*\*Luxury\s+Autos[:\s]+\*\*\s*((?:[^\n]+\n?){1,8})',
-        full_text,
-        re.IGNORECASE
+        full_text, re.IGNORECASE
     )
     if la_m:
         la_text = la_m.group(1)
@@ -259,11 +380,10 @@ def extract_car_meet_from_inline(full_text):
             if 2 < len(line) < 60 and not line.startswith('**') and not line.startswith('#'):
                 car_meet['luxuryAutos'].append(line)
     
-    # Premium Deluxe Motorsports (PDM)
+    # Premium Deluxe Motorsports
     pdm_m = re.search(
         r'\*\*Premium\s+Deluxe\s+Motorsports?[:\s]+\*\*\s*((?:[^\n]+\n?){1,12})',
-        full_text,
-        re.IGNORECASE
+        full_text, re.IGNORECASE
     )
     if pdm_m:
         pdm_text = pdm_m.group(1)
@@ -275,9 +395,9 @@ def extract_car_meet_from_inline(full_text):
     
     return car_meet
 
-# ── Improvement 1: Priority selector fallbacks for podium ────────────
+# ── Podium and prize ride helpers ──────────────────────────────────────
 def get_podium_vehicle(soup, full_text):
-    """Try multiple selector strategies to find the podium vehicle."""
+    """Try multiple strategies to find the podium vehicle."""
     for tag in ["strong", "span", "h3", "h4", "b"]:
         target = soup.find(tag, string=re.compile(r"Lucky\s+Wheel|Podium\s+Vehicle", re.I))
         if target:
@@ -312,9 +432,11 @@ def parse_tiered_multiplier(text):
             return {'multiplier': min(gta_mult, base_mult), 'gta_plus_multiplier': max(gta_mult, base_mult)}
     return None
 
-# ── Parser ────────────────────────────────────────────────────────────
+# ── MAIN PARSER ────────────────────────────────────────────────────────
 def parse(html):
+    """Parse GTA Online HTML page and extract weekly data."""
     soup = BeautifulSoup(html, 'html.parser')
+    # Remove nav, ads, etc.
     for tag in soup.find_all(['nav', 'footer', 'aside', 'script', 'style', 'header']):
         tag.decompose()
     for el in soup.find_all(class_=re.compile(r'toc|table.of.content|ez-toc', re.I)):
@@ -326,6 +448,7 @@ def parse(html):
         lis   = ul.find_all('li', recursive=False)
         if links and len(links) == len(lis) and all(a.get('href', '').startswith('#') for a in links):
             ul.decompose()
+    
     full_text = soup.get_text(separator='\n')
     full_text = re.sub(r'\r\n', '\n', full_text)
     full_text = re.sub(r'\n{3,}', '\n\n', full_text).strip()
@@ -418,7 +541,7 @@ def parse(html):
                     else:
                         data['bonuses'].append({'multiplier': mult, 'name': name, 'note': note})
     
-    # Inline high-multiplier catch
+    # Inline high-multiplier catch (10x, 8x)
     for mult_val, mult_re in [(10, r'10[Xx×]'), (8, r'8[Xx×]')]:
         for m in re.finditer(mult_re + r'\s+(?:GTA\$\s+and\s+RP\s+(?:on|for)\s+)?([A-Z][A-Za-z\s\']+?)(?:\.|,|\n)', full_text):
             name = m.group(1).strip().rstrip('.')
@@ -427,17 +550,8 @@ def parse(html):
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
                     data['bonuses'].append({'multiplier': mult_val, 'name': name, 'note': 'Event bonus'})
     
-    # ── Salvage ──
-    salvage_text = get_section_text(soup, r'special\s+activit|salvage\s+yard')
-    for m in re.finditer(
-        r'(?:The\s+)?([\w\s]+Robbery)\s*[:–\-]\s*([A-Z][A-Za-z\s]+?)(?:\n|·|,|\.|$)',
-        salvage_text, re.MULTILINE
-    ):
-        robbery = 'The ' + re.sub(r'^The\s+', '', m.group(1).strip())
-        car = m.group(2).strip().rstrip('.')
-        if 2 < len(car) < 60 and not any(s['robbery'] == robbery for s in data['salvage']):
-            data['salvage'].append({'tier': salvage_tier(robbery), 'robbery': robbery, 'car': car})
-    data['salvage'].sort(key=lambda x: x['tier'])
+    # ── Salvage (FIXED) ──
+    data['salvage'] = parse_salvage_strict(soup, full_text)
     
     # ── Discounts ──
     for heading in soup.find_all(['h2', 'h3', 'h4']):
@@ -526,8 +640,7 @@ def parse(html):
     if m:
         data['fibFile'] = m.group(1).strip()
     
-    # ── Most Wanted (FIX: Strict section scoping) ──────────────────────
-    # Look for Most Wanted ONLY in the "Weekly Challenges" section
+    # ── Most Wanted (FIXED: Strict section scoping) ──
     mw_text = None
     for heading in soup.find_all(['h2', 'h3']):
         if re.search(r'weekly\s+challenge|All Weekly Challenges', heading.get_text(strip=True), re.IGNORECASE):
@@ -542,11 +655,9 @@ def parse(html):
             break
     
     if not mw_text:
-        # Fallback: try generic Most Wanted section
         mw_text = get_section_text(soup, r'most\s+wanted|bail\s+office\s+bounty|bail\s+office\s+target')
     
     if not mw_text:
-        # Last resort: use full text (risky but keeps backwards compat)
         mw_text = full_text
     
     now_utc = datetime.datetime.utcnow()
@@ -567,20 +678,19 @@ def parse(html):
             if mw_month and mw_day:
                 mw_date = datetime.datetime(now_utc.year, mw_month, mw_day)
                 if abs((now_utc - mw_date).days) > 14:
-                    continue  # Skip stale dates
+                    continue
         except Exception:
             pass
         if not any(t['name'] == name and t['date'] == date for t in data['mostWanted']):
             data['mostWanted'].append({'name': name, 'date': date, 'reward': reward})
     data['mostWanted'].sort(key=lambda x: int(re.sub(r'\D', '', x['date']) or '0'))
     
-    # ── LS Car Meet (FIX: Fallback to inline markdown parsing) ─────────
+    # ── LS Car Meet (FIXED: Fallback to inline markdown) ──
     cm_text = get_section_text(soup, r'LS\s+Car\s+Meet\s+Activit')
     if not cm_text:
         cm_text = get_section_text(soup, r'LS\s+Car\s+Meet')
     
     if cm_text:
-        # Existing section-based parsing
         if data['prizeRide']:
             data['carMeet']['prizeRide'] = data['prizeRide']
         m = re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', cm_text, re.IGNORECASE)
@@ -617,18 +727,19 @@ def parse(html):
         la_items = get_section_items(soup, r'Luxury\s+Autos', include_paragraphs=False)
         data['carMeet']['luxuryAutos'] = [v for v in la_items if 2 < len(v) < 60][:6]
     else:
-        # NEW FIX: Fallback to inline markdown parsing
+        # NEW FIX: Fallback to inline markdown
         print("  [CarMeet] Section-based parsing failed, trying inline markdown...")
         inline_cm = extract_car_meet_from_inline(full_text)
         if inline_cm['testRides'] or inline_cm['luxuryAutos'] or inline_cm['pdm'] or inline_cm['premiumTest']:
             data['carMeet'] = inline_cm
-            print(f"  [CarMeet] Inline parsing succeeded: {len(inline_cm['testRides'])} test rides, {len(inline_cm['luxuryAutos'])} luxury autos, {len(inline_cm['pdm'])} PDM")
+            print(f"  [CarMeet] Inline parsing succeeded: {len(inline_cm['testRides'])} test rides, "
+                  f"{len(inline_cm['luxuryAutos'])} luxury autos, {len(inline_cm['pdm'])} PDM")
     
     return data
 
 # ── Fandomwire supplement ─────────────────────────────────────────────
 def supplement_from_fandomwire(parsed, now, existing):
-    """Fetch Fandomwire article and fill in any missing fields."""
+    """Fetch Fandomwire article and fill in missing fields."""
     url = find_fandomwire_url(now)
     html = fetch(url)
     if not html or len(html) < 1000:
@@ -663,7 +774,7 @@ def supplement_from_fandomwire(parsed, now, existing):
 # ── Main ──────────────────────────────────────────────────────────────
 def main():
     now = datetime.datetime.utcnow()
-    print(f"[GTA HQ Scraper v6.1] Starting — {now.strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"[GTA HQ Scraper v6.2] Starting — {now.strftime('%Y-%m-%d %H:%M UTC')}")
     try:
         with open("weekly-data.json", "r", encoding="utf-8") as f:
             existing = json.load(f)
@@ -673,6 +784,7 @@ def main():
         existing_label = ""
     print(f"  Stored week: '{existing_label}'")
     parsed = None
+    
     def try_parse(html, url, label):
         if not html or len(html) < 1000:
             print("  [SKIP] Response too short/empty")
