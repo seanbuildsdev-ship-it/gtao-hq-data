@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 """
-GTA Online HQ — Weekly Data Scraper v6
+GTA Online HQ — Weekly Data Scraper v6.1 (FIXED)
 - PCQuest first (new URL every week)
 - Fandomwire supplement (constructed URL — no scraping search pages)
 - Freshness + quality validation
 - 10x bonus support
-- No markdown artifacts
+- ✓ FIXED: Most Wanted section scoping
+- ✓ FIXED: Car Meet inline markdown parsing
 """
-
 import json, re, sys, datetime, urllib.parse
 import requests
 from bs4 import BeautifulSoup
 
 # ── Sources ───────────────────────────────────────────────────────────
-
 ROLLING_SOURCES = [
     "https://rockstarintel.com/gta-online-event-week/",
     "https://techwiser.com/gta-online-weekly-update/",
     "https://www.dexerto.com/gta/gta-online-weekly-update-patch-notes-1498644/",
 ]
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -27,7 +25,6 @@ HEADERS = {
 }
 
 # ── Fetch ─────────────────────────────────────────────────────────────
-
 def fetch(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=15)
@@ -38,7 +35,6 @@ def fetch(url):
         return None
 
 # ── Fandomwire URL builder ────────────────────────────────────────────
-
 def ordinal(n):
     """1->'1st', 2->'2nd', 23->'23rd', 30->'30th'"""
     if 11 <= (n % 100) <= 13:
@@ -50,29 +46,24 @@ def find_fandomwire_url(now):
     Construct Fandomwire URL directly from the current GTA week dates.
     Fandomwire uses Thursday-to-next-Thursday (7 days).
     Pattern: gta-online-weekly-update-april-23rd-30th-2026/
-             gta-online-weekly-update-march-26th-april-2nd-2026/
     """
     days_since_thursday = (now.weekday() - 3) % 7
     thursday = now - datetime.timedelta(days=days_since_thursday)
     end_date  = thursday + datetime.timedelta(days=7)
-
     start_month = thursday.strftime('%B').lower()
     end_month   = end_date.strftime('%B').lower()
     start_day   = ordinal(thursday.day)
     end_day     = ordinal(end_date.day)
     year        = thursday.year
-
     if start_month == end_month:
         slug = f"{start_month}-{start_day}-{end_day}-{year}"
     else:
         slug = f"{start_month}-{start_day}-{end_month}-{end_day}-{year}"
-
     url = f"https://fandomwire.com/gta-online-weekly-update-{slug}/"
     print(f"  Fandomwire URL: {url}")
     return url
 
 # ── Freshness checks ──────────────────────────────────────────────────
-
 def is_current_week(label):
     """True if label matches the current real-world GTA week (within 7 days)."""
     if not label:
@@ -87,8 +78,6 @@ def is_current_week(label):
     if label_month is None:
         return True
     if label_month != now.month:
-        # Allow month crossover (e.g. APR 28 checked on MAY 2)
-        # Check if the other month is adjacent
         if abs(label_month - now.month) not in (1, 11):
             return False
     numbers = re.findall(r'\d+', label)
@@ -112,25 +101,16 @@ def is_fresh(scraped_label, stored_label):
     return True
 
 def is_data_actually_new(scraped, stored):
-    """
-    Even if the week label is current, check that key fields actually changed.
-    Prevents saving mid-update ghost data where the date flipped but content didn't.
-    Returns (bool, reason_string).
-    """
+    """Check that key fields actually changed."""
     scraped_label = scraped.get('weekLabel', '')
     stored_label  = stored.get('weekLabel', '')
     norm = lambda s: re.sub(r'[^A-Z0-9]', '', s.upper())
-
     if scraped_label and stored_label and norm(scraped_label) == norm(stored_label):
         s_names = {b.get('name', '') for b in scraped.get('bonuses', [])}
         e_names = {b.get('name', '') for b in stored.get('bonuses', [])}
         if s_names and s_names != e_names:
             return True, "Same week but bonuses differ — updating"
         return False, "Same week, data unchanged"
-
-    # ── Salvage Yard as primary canary ───────────────────────────────
-    # Salvage cars are the most reliable freshness indicator — sites almost
-    # never update the title/date without also updating salvage targets.
     if scraped.get('salvage') and stored.get('salvage'):
         scraped_cars = {s.get('car', '') for s in scraped['salvage']}
         stored_cars  = {s.get('car', '') for s in stored['salvage']}
@@ -140,37 +120,30 @@ def is_data_actually_new(scraped, stored):
         elif scraped_cars != stored_cars:
             print(f"  ✓ Salvage cars changed — confirmed fresh data")
             return True, "Salvage yard changed — confirmed fresh"
-
     checks_passed, checks_total = 0, 0
-
     if scraped.get('podium') and stored.get('podium'):
         checks_total += 1
         if scraped['podium'] != stored['podium']:
             checks_passed += 1
         else:
             print(f"  [WARN] Podium unchanged ({scraped['podium']}) — may be mid-update")
-
     if scraped.get('prizeRide') and stored.get('prizeRide'):
         checks_total += 1
         if scraped['prizeRide'] != stored['prizeRide']:
             checks_passed += 1
         else:
             print(f"  [WARN] Prize ride unchanged ({scraped['prizeRide']}) — may be mid-update")
-
     if scraped.get('bonuses'):
         checks_total += 1
         checks_passed += 1
-
     if checks_total == 0:
         return True, "No comparison data available"
-
     score = checks_passed / checks_total
     if score >= 0.5:
         return True, f"Quality {checks_passed}/{checks_total}"
     return False, f"Low quality {checks_passed}/{checks_total} — likely mid-update ghost"
 
 # ── HTML section helpers ──────────────────────────────────────────────
-
 def get_section_items(soup, pattern, include_paragraphs=True):
     """Find heading matching pattern, return li items until next heading."""
     for heading in soup.find_all(['h2', 'h3', 'h4']):
@@ -226,15 +199,85 @@ def salvage_tier(name):
     if re.search(r'gangbanger', n):               return 1
     return 2
 
+# ── NEW FIX: Car Meet inline markdown parsing ─────────────────────────
+def extract_car_meet_from_inline(full_text):
+    """
+    Parse Car Meet data from inline markdown patterns like:
+    **Premium Test Ride:** Karin S95 (PS5, Xbox Series X|S, and PC Enhanced exclusive)
+    **Test Ride 1:** Dinka Jester
+    etc.
+    """
+    car_meet = {
+        "prizeRide": "",
+        "prizeReq": "",
+        "premiumTest": "",
+        "premiumTestNote": "",
+        "testRides": [],
+        "luxuryAutos": [],
+        "pdm": [],
+    }
+    
+    # Premium Test Ride + note
+    m = re.search(
+        r'\*\*Premium\s+Test\s+Ride[:\s]+\*\*\s*([A-Z][A-Za-z\s]+?)(?:\s*\(|$)',
+        full_text,
+        re.IGNORECASE
+    )
+    if m:
+        car_meet['premiumTest'] = m.group(1).strip()
+        note_m = re.search(
+            r'\*\*Premium\s+Test\s+Ride[:\s]+\*\*\s*[A-Z][A-Za-z\s]+?\s*\(([^)]+)\)',
+            full_text,
+            re.IGNORECASE
+        )
+        if note_m:
+            car_meet['premiumTestNote'] = note_m.group(1).strip()
+    
+    # Test Rides (Test Ride 1, 2, 3...)
+    test_rides = []
+    for m in re.finditer(
+        r'\*\*Test\s+(?:Ride|Track)\s+\d+[:\s]+\*\*\s*([A-Z][A-Za-z\s]+?)(?:\n|\*\*|$)',
+        full_text,
+        re.IGNORECASE
+    ):
+        ride = m.group(1).strip()
+        if 2 < len(ride) < 60 and ride.lower() not in ('test rides', 'test vehicles'):
+            test_rides.append(ride)
+    car_meet['testRides'] = test_rides[:3]
+    
+    # Luxury Autos
+    la_m = re.search(
+        r'\*\*Luxury\s+Autos[:\s]+\*\*\s*((?:[^\n]+\n?){1,8})',
+        full_text,
+        re.IGNORECASE
+    )
+    if la_m:
+        la_text = la_m.group(1)
+        for line in la_text.split('\n'):
+            line = re.sub(r'[-•*+]\s*', '', line).strip()
+            line = re.sub(r'\((?:new|wrapped)[^)]+\)', '', line, flags=re.IGNORECASE).strip()
+            if 2 < len(line) < 60 and not line.startswith('**') and not line.startswith('#'):
+                car_meet['luxuryAutos'].append(line)
+    
+    # Premium Deluxe Motorsports (PDM)
+    pdm_m = re.search(
+        r'\*\*Premium\s+Deluxe\s+Motorsports?[:\s]+\*\*\s*((?:[^\n]+\n?){1,12})',
+        full_text,
+        re.IGNORECASE
+    )
+    if pdm_m:
+        pdm_text = pdm_m.group(1)
+        for line in pdm_text.split('\n'):
+            line = re.sub(r'[-•*+]\s*', '', line).strip()
+            line = re.sub(r'\s*\((?:\d+%|Open\s+Wheel)[^)]*\)', '', line, flags=re.IGNORECASE)
+            if 2 < len(line) < 60 and not line.startswith('**') and not line.startswith('#'):
+                car_meet['pdm'].append(line)
+    
+    return car_meet
 
 # ── Improvement 1: Priority selector fallbacks for podium ────────────
-
-
 def get_podium_vehicle(soup, full_text):
-    """
-    Try multiple selector strategies to find the podium vehicle.
-    Priority selectors before falling back to regex.
-    """
+    """Try multiple selector strategies to find the podium vehicle."""
     for tag in ["strong", "span", "h3", "h4", "b"]:
         target = soup.find(tag, string=re.compile(r"Lucky\s+Wheel|Podium\s+Vehicle", re.I))
         if target:
@@ -259,13 +302,9 @@ def get_podium_vehicle(soup, full_text):
     return ""
 
 def parse_tiered_multiplier(text):
-    """
-    Detect "4x for GTA+ / 2x for everyone" patterns.
-    Returns dict with base multiplier and optional gta_plus_multiplier.
-    """
+    """Detect "4x for GTA+ / 2x for everyone" patterns."""
     gta_plus_m = re.search(r'([2-9]|10)[x×].*?GTA\+', text, re.IGNORECASE)
     standard_m = re.search(r'([2-9]|10)[x×](?!.*GTA\+)', text, re.IGNORECASE)
-
     if gta_plus_m and standard_m:
         gta_mult  = int(gta_plus_m.group(1))
         base_mult = int(standard_m.group(1))
@@ -274,10 +313,8 @@ def parse_tiered_multiplier(text):
     return None
 
 # ── Parser ────────────────────────────────────────────────────────────
-
 def parse(html):
     soup = BeautifulSoup(html, 'html.parser')
-
     for tag in soup.find_all(['nav', 'footer', 'aside', 'script', 'style', 'header']):
         tag.decompose()
     for el in soup.find_all(class_=re.compile(r'toc|table.of.content|ez-toc', re.I)):
@@ -289,11 +326,10 @@ def parse(html):
         lis   = ul.find_all('li', recursive=False)
         if links and len(links) == len(lis) and all(a.get('href', '').startswith('#') for a in links):
             ul.decompose()
-
     full_text = soup.get_text(separator='\n')
     full_text = re.sub(r'\r\n', '\n', full_text)
     full_text = re.sub(r'\n{3,}', '\n\n', full_text).strip()
-
+    
     data = {
         "weekLabel":   "",
         "challenge":   {"desc": "", "reward": ""},
@@ -312,7 +348,7 @@ def parse(html):
             "testRides": [], "luxuryAutos": [], "pdm": [],
         },
     }
-
+    
     # ── Week label ──
     h1 = soup.find('h1')
     if h1:
@@ -327,7 +363,7 @@ def parse(html):
             label = re.sub(r'\s+to\s+', ' – ', label, flags=re.IGNORECASE)
             label = re.sub(r'(\w{3})\w*\s+(\d+)', lambda x: x.group(1).upper()+' '+x.group(2), label)
             data['weekLabel'] = label.strip()
-
+    
     # ── Challenge ──
     chal_text = get_section_text(soup, r'weekly\s+challenge')
     if chal_text:
@@ -343,11 +379,10 @@ def parse(html):
                 data['challenge']['desc'] = clean(lines[0])
             if len(lines) > 1 and not data['challenge']['reward']:
                 data['challenge']['reward'] = clean(lines[1])
-
+    
     # ── Bonus Money ──
     SKIP_WORDS = ['log in', 'login', 'receive', 'subscribers', 'peyote plants',
                   'outfit', 'email', 'rockstar propaganda', 'tee', 'return']
-
     for mult, pattern in [
         (10, r'(?:10[x×]|ten\s+times).*(?:money|bonus|reward|gta|rp)'),
         (4,  r'(?:quadruple|4[x×]).*(?:money|bonus|reward|gta|rp)'),
@@ -370,11 +405,8 @@ def parse(html):
                     continue
                 key = f"{mult}:{name}"
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
-                    # Check for tiered GTA+ multiplier in same bullet
-                    # e.g. "4x for GTA+ / 2x for everyone else"
                     tiered = parse_tiered_multiplier(b)
                     if tiered and tiered['multiplier'] != mult:
-                        # Add base multiplier for regular players
                         base_key = f"{tiered['multiplier']}:{name}"
                         if not any(f"{x['multiplier']}:{x['name']}" == base_key for x in data['bonuses']):
                             data['bonuses'].append({
@@ -385,8 +417,8 @@ def parse(html):
                             })
                     else:
                         data['bonuses'].append({'multiplier': mult, 'name': name, 'note': note})
-
-    # Inline high-multiplier catch (10x mentioned in paragraph, not heading)
+    
+    # Inline high-multiplier catch
     for mult_val, mult_re in [(10, r'10[Xx×]'), (8, r'8[Xx×]')]:
         for m in re.finditer(mult_re + r'\s+(?:GTA\$\s+and\s+RP\s+(?:on|for)\s+)?([A-Z][A-Za-z\s\']+?)(?:\.|,|\n)', full_text):
             name = m.group(1).strip().rstrip('.')
@@ -394,7 +426,7 @@ def parse(html):
                 key = f"{mult_val}:{name}"
                 if not any(f"{x['multiplier']}:{x['name']}" == key for x in data['bonuses']):
                     data['bonuses'].append({'multiplier': mult_val, 'name': name, 'note': 'Event bonus'})
-
+    
     # ── Salvage ──
     salvage_text = get_section_text(soup, r'special\s+activit|salvage\s+yard')
     for m in re.finditer(
@@ -406,7 +438,7 @@ def parse(html):
         if 2 < len(car) < 60 and not any(s['robbery'] == robbery for s in data['salvage']):
             data['salvage'].append({'tier': salvage_tier(robbery), 'robbery': robbery, 'car': car})
     data['salvage'].sort(key=lambda x: x['tier'])
-
+    
     # ── Discounts ──
     for heading in soup.find_all(['h2', 'h3', 'h4']):
         heading_text = heading.get_text(strip=True)
@@ -436,8 +468,7 @@ def parse(html):
                 existing_disc['category'] = cat
         else:
             data['discounts'].append({'pct': pct, 'category': cat, 'until': '', 'items': items})
-
-    # Business discount sentence
+    
     biz_m = (
         re.search(r'All\s+([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab|Farm)s?)[^.]*?(\d+)%\s*off', full_text, re.IGNORECASE) or
         re.search(r'([A-Z][A-Za-z\s]{3,30}(?:Office|Offices|Yard|Hangar|Bunker|Lab|Farm)s?)\s+(?:are|is)\s+(\d+)%\s*off', full_text, re.IGNORECASE)
@@ -448,7 +479,7 @@ def parse(html):
         pct = int(biz_m.group(2))
         if not any(d['pct'] == pct and d['category'].lower().startswith(cat.split()[0].lower()) for d in data['discounts']):
             data['discounts'].insert(0, {'pct': pct, 'category': cat, 'until': '', 'items': []})
-
+    
     # ── Gun Van ──
     gv_items = get_section_items(soup, r'gun\s+van', include_paragraphs=False)
     for b in gv_items:
@@ -467,10 +498,10 @@ def parse(html):
         deal = 'FREE' if free else (f"{pct_m.group(1)}% OFF" if pct_m else '')
         if deal:
             data['gunVan'].append({'name': name, 'deal': deal, 'gtaPlus': plus})
-
-    # ── Podium (selector fallbacks for reliability) ──
+    
+    # ── Podium ──
     data['podium'] = get_podium_vehicle(soup, full_text)
-
+    
     # ── Prize Ride ──
     m = (
         re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', full_text, re.IGNORECASE) or
@@ -486,7 +517,7 @@ def parse(html):
             candidate = m.group(1).strip()
             if candidate.lower() not in ('challenge', 'the', 'a', 'an', ''):
                 data['prizeRide'] = candidate
-
+    
     # ── FIB File ──
     m = (
         re.search(r'(?:FIB\s+Priority\s+File|Priority\s+File)[:\s]+(?:the\s+)?([A-Z][A-Za-z\s]+File)', full_text, re.IGNORECASE) or
@@ -494,12 +525,30 @@ def parse(html):
     )
     if m:
         data['fibFile'] = m.group(1).strip()
-
-    # ── Most Wanted (scoped to section + date validation) ──
-    # Scope to Bail Office / Most Wanted section only — avoids sidebar pollution
-    mw_text = get_section_text(soup, r'most\s+wanted|bail\s+office\s+bounty|bail\s+office\s+target')
+    
+    # ── Most Wanted (FIX: Strict section scoping) ──────────────────────
+    # Look for Most Wanted ONLY in the "Weekly Challenges" section
+    mw_text = None
+    for heading in soup.find_all(['h2', 'h3']):
+        if re.search(r'weekly\s+challenge|All Weekly Challenges', heading.get_text(strip=True), re.IGNORECASE):
+            level = int(heading.name[1])
+            section_parts = []
+            for el in heading.find_all_next():
+                if el.name in ['h1', 'h2', 'h3', 'h4'] and int(el.name[1]) <= level:
+                    break
+                text = el.get_text()
+                section_parts.append(text)
+            mw_text = '\n'.join(section_parts)
+            break
+    
     if not mw_text:
-        mw_text = full_text  # fallback to full text if section not found
+        # Fallback: try generic Most Wanted section
+        mw_text = get_section_text(soup, r'most\s+wanted|bail\s+office\s+bounty|bail\s+office\s+target')
+    
+    if not mw_text:
+        # Last resort: use full text (risky but keeps backwards compat)
+        mw_text = full_text
+    
     now_utc = datetime.datetime.utcnow()
     for m in re.finditer(
         r'([A-Z][a-z]+ [A-Z][a-z\']+(?:\s+[A-Z][a-z]+)?)\s*[-–]\s*'
@@ -509,7 +558,6 @@ def parse(html):
         name   = m.group(1).strip()
         date   = m.group(2).strip()
         reward = '$' + m.group(3)
-        # Validate date is within 14 days of now (discard stale archive entries)
         try:
             month_map_mw = {'Jan':1,'Feb':2,'Mar':3,'Apr':4,'May':5,'Jun':6,
                             'Jul':7,'Aug':8,'Sep':9,'Oct':10,'Nov':11,'Dec':12}
@@ -519,18 +567,20 @@ def parse(html):
             if mw_month and mw_day:
                 mw_date = datetime.datetime(now_utc.year, mw_month, mw_day)
                 if abs((now_utc - mw_date).days) > 14:
-                    continue  # Skip stale dates from sidebars/archives
+                    continue  # Skip stale dates
         except Exception:
             pass
         if not any(t['name'] == name and t['date'] == date for t in data['mostWanted']):
             data['mostWanted'].append({'name': name, 'date': date, 'reward': reward})
     data['mostWanted'].sort(key=lambda x: int(re.sub(r'\D', '', x['date']) or '0'))
-
-    # ── LS Car Meet ──
+    
+    # ── LS Car Meet (FIX: Fallback to inline markdown parsing) ─────────
     cm_text = get_section_text(soup, r'LS\s+Car\s+Meet\s+Activit')
     if not cm_text:
         cm_text = get_section_text(soup, r'LS\s+Car\s+Meet')
+    
     if cm_text:
+        # Existing section-based parsing
         if data['prizeRide']:
             data['carMeet']['prizeRide'] = data['prizeRide']
         m = re.search(r'to\s+win\s+the\s+([A-Z][A-Za-z\s]{3,40}?)(?:\n|·|,|\.)', cm_text, re.IGNORECASE)
@@ -547,18 +597,14 @@ def parse(html):
             note_m = re.search(r'(?:Enhanced|PS5|Series|exclusive|HSW)[^\n]*', cm_text, re.IGNORECASE)
             if note_m:
                 data['carMeet']['premiumTestNote'] = clean(note_m.group(0))
-        # Segregate standard test rides from HSW premium test ride
-        # Filter out premium test car if it appears in the test track list
         premium_car = data['carMeet'].get('premiumTest', '')
         m = re.search(r'Test\s+(?:Vehicles?|Track|Rides?)[:\s]+((?:[^\n]+\n?){1,6})', cm_text, re.IGNORECASE)
         if m:
             rides = []
             for line in m.group(1).split('\n'):
                 line = re.sub(r'[-–:].+$', '', line.strip().lstrip('-•* ')).strip()
-                # Skip if it's the premium test car or a generic heading
                 if 2 < len(line) < 60 and line != premium_car and line.lower() not in ('test vehicles', 'test track', 'test rides'):
                     rides.append(line)
-            # Dedupe preserving order
             seen_rides = set()
             unique_rides = []
             for r in rides:
@@ -566,17 +612,21 @@ def parse(html):
                     seen_rides.add(r)
                     unique_rides.append(r)
             data['carMeet']['testRides'] = unique_rides[:3]
-
-    pdm_items = get_section_items(soup, r'Premium\s+Deluxe\s+Motorsport', include_paragraphs=False)
-    data['carMeet']['pdm'] = [re.sub(r'\s*\(\d+%.*?\)', '', v).strip() for v in pdm_items if 2 < len(v) < 60][:8]
-
-    la_items = get_section_items(soup, r'Luxury\s+Autos', include_paragraphs=False)
-    data['carMeet']['luxuryAutos'] = [v for v in la_items if 2 < len(v) < 60][:6]
-
+        pdm_items = get_section_items(soup, r'Premium\s+Deluxe\s+Motorsport', include_paragraphs=False)
+        data['carMeet']['pdm'] = [re.sub(r'\s*\(\d+%.*?\)', '', v).strip() for v in pdm_items if 2 < len(v) < 60][:8]
+        la_items = get_section_items(soup, r'Luxury\s+Autos', include_paragraphs=False)
+        data['carMeet']['luxuryAutos'] = [v for v in la_items if 2 < len(v) < 60][:6]
+    else:
+        # NEW FIX: Fallback to inline markdown parsing
+        print("  [CarMeet] Section-based parsing failed, trying inline markdown...")
+        inline_cm = extract_car_meet_from_inline(full_text)
+        if inline_cm['testRides'] or inline_cm['luxuryAutos'] or inline_cm['pdm'] or inline_cm['premiumTest']:
+            data['carMeet'] = inline_cm
+            print(f"  [CarMeet] Inline parsing succeeded: {len(inline_cm['testRides'])} test rides, {len(inline_cm['luxuryAutos'])} luxury autos, {len(inline_cm['pdm'])} PDM")
+    
     return data
 
 # ── Fandomwire supplement ─────────────────────────────────────────────
-
 def supplement_from_fandomwire(parsed, now, existing):
     """Fetch Fandomwire article and fill in any missing fields."""
     url = find_fandomwire_url(now)
@@ -584,23 +634,18 @@ def supplement_from_fandomwire(parsed, now, existing):
     if not html or len(html) < 1000:
         print("  [Supplement] Fandomwire fetch failed")
         return parsed
-
     supp = parse(html)
     print(f"  [Supplement] Fandomwire — podium:'{supp.get('podium')}' "
           f"prizeRide:'{supp.get('prizeRide')}' mostWanted:{len(supp.get('mostWanted', []))}")
-
     if not parsed.get('podium') and supp.get('podium'):
         parsed['podium'] = supp['podium']
         print(f"  [Supplement] podium filled: {parsed['podium']}")
-
     if not parsed.get('prizeRide') and supp.get('prizeRide'):
         parsed['prizeRide'] = supp['prizeRide']
         print(f"  [Supplement] prizeRide filled: {parsed['prizeRide']}")
-
     if supp.get('mostWanted'):
         parsed['mostWanted'] = supp['mostWanted']
         print(f"  [Supplement] mostWanted: {len(parsed['mostWanted'])} targets")
-
     cm  = parsed.get('carMeet', {})
     scm = supp.get('carMeet', {})
     for field in ['prizeRide', 'prizeReq', 'premiumTest', 'premiumTestNote', 'testRides', 'luxuryAutos', 'pdm']:
@@ -608,22 +653,17 @@ def supplement_from_fandomwire(parsed, now, existing):
             cm[field] = scm[field]
             print(f"  [Supplement] carMeet.{field} filled")
     parsed['carMeet'] = cm
-
     if not parsed.get('fibFile') and supp.get('fibFile'):
         parsed['fibFile'] = supp['fibFile']
-
     if not parsed.get('salvage') and supp.get('salvage'):
         parsed['salvage'] = supp['salvage']
         print(f"  [Supplement] salvage filled: {len(parsed['salvage'])} targets")
-
     return parsed
 
 # ── Main ──────────────────────────────────────────────────────────────
-
 def main():
     now = datetime.datetime.utcnow()
-    print(f"[GTA HQ Scraper] Starting — {now.strftime('%Y-%m-%d %H:%M UTC')}")
-
+    print(f"[GTA HQ Scraper v6.1] Starting — {now.strftime('%Y-%m-%d %H:%M UTC')}")
     try:
         with open("weekly-data.json", "r", encoding="utf-8") as f:
             existing = json.load(f)
@@ -632,17 +672,13 @@ def main():
         existing = {}
         existing_label = ""
     print(f"  Stored week: '{existing_label}'")
-
     parsed = None
-
     def try_parse(html, url, label):
         if not html or len(html) < 1000:
             print("  [SKIP] Response too short/empty")
             return None
         result = parse(html)
         scraped_label = result.get('weekLabel', '')
-
-        # Synthesize label from URL if empty (PCQuest "april-23-2026" pattern)
         if not scraped_label and str(now.year) in url:
             now_month_abbr = now.strftime("%B").lower()[:3]
             if now_month_abbr in url.lower():
@@ -665,11 +701,10 @@ def main():
                     end_str = str(end.day)
                     if end.month != start.month:
                         end_str = end.strftime('%b').upper() + ' ' + end_str
-                    synthesized = start.strftime('%b').upper() + ' ' + str(start_day) + ' \u2013 ' + end_str
+                    synthesized = start.strftime('%b').upper() + ' ' + str(start_day) + ' – ' + end_str
                     result['weekLabel'] = synthesized
                     scraped_label = synthesized
                     print(f"  Synthesized label: '{scraped_label}'")
-
         has_data = bool(result.get('bonuses') or result.get('discounts') or scraped_label)
         if not has_data:
             print("  [SKIP] No useful data")
@@ -683,8 +718,7 @@ def main():
             return None
         print(f"  ✓ Valid! Week:'{scraped_label}' — {reason}")
         return result
-
-    # ── Strategy 1: PCQuest (new URL every week) ──────────────────────
+    
     print("\n── Strategy 1: PCQuest ──")
     pcq_month = now.strftime("%B").lower()
     pcq_search = f"https://www.pcquest.com/gaming/?s=gta+online+weekly+update+{pcq_month}+{now.year}"
@@ -697,8 +731,7 @@ def main():
             if result:
                 parsed = result
                 break
-
-    # ── Strategy 2: Rolling URLs ──────────────────────────────────────
+    
     if not parsed:
         print("\n── Strategy 2: Rolling URLs ──")
         for url in ROLLING_SOURCES:
@@ -707,16 +740,14 @@ def main():
             if result:
                 parsed = result
                 break
-
-    # ── Strategy 3: Fandomwire direct URL ────────────────────────────
+    
     if not parsed:
         print("\n── Strategy 3: Fandomwire direct ──")
         fw_url = find_fandomwire_url(now)
         result = try_parse(fetch(fw_url), fw_url, 'Fandomwire')
         if result:
             parsed = result
-
-    # ── No fresh data — use stored if it's current week ───────────────
+    
     if not parsed:
         if existing_label and is_current_week(existing_label):
             print(f"\n[INFO] Stored '{existing_label}' is current week — supplementing gaps only")
@@ -725,12 +756,10 @@ def main():
             print("\n[INFO] No fresh data found. Sites may not have published yet.")
             print("       Cron retries at 13:00 and 16:00 UTC today.")
             sys.exit(0)
-
-    # ── Supplement from Fandomwire ────────────────────────────────────
+    
     print("\n── Supplementing from Fandomwire ──")
     parsed = supplement_from_fandomwire(parsed, now, existing)
-
-    # ── Debug summary ─────────────────────────────────────────────────
+    
     b_list = [str(b['multiplier'])+'x '+b['name'][:25] for b in parsed['bonuses']]
     s_list = [s['car'] for s in parsed['salvage']]
     d_list = [str(d['pct'])+'% '+d['category'][:20] for d in parsed['discounts']]
@@ -742,16 +771,15 @@ def main():
     print(f"  discounts  = {len(parsed['discounts'])} {d_list}")
     print(f"  gunVan     = {len(parsed['gunVan'])} {g_list}")
     print(f"  mostWanted = {len(parsed['mostWanted'])}")
+    print(f"  carMeet    = test:{len(parsed['carMeet']['testRides'])} luxury:{len(parsed['carMeet']['luxuryAutos'])} pdm:{len(parsed['carMeet']['pdm'])}")
     print(f"  podium     = '{parsed['podium']}'")
     print(f"  prizeRide  = '{parsed['prizeRide']}'")
     print(f"  fibFile    = '{parsed['fibFile']}'")
-
-    # ── Merge & save ──────────────────────────────────────────────────
+    
     week_changed = bool(
         parsed.get('weekLabel') and existing.get('weekLabel') and
         parsed['weekLabel'] != existing.get('weekLabel')
     )
-
     def pick(s, e, time_sensitive=False):
         if time_sensitive and week_changed:
             return s if s else None
@@ -762,7 +790,7 @@ def main():
         if isinstance(s, dict):
             return s if any(s.values()) else e
         return s if s else e
-
+    
     output = {
         "_updated":    now.strftime("%Y-%m-%d"),
         "weekLabel":   pick(parsed["weekLabel"],   existing.get("weekLabel",   "")),
@@ -786,16 +814,15 @@ def main():
             "pdm":             pick(parsed["carMeet"]["pdm"],             existing.get("carMeet", {}).get("pdm",             [])),
         },
     }
-
     with open("weekly-data.json", "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
-
     print(f"\n✅ Done! Week:{output['weekLabel']} | "
           f"Bonuses:{len(output['bonuses'])} | "
           f"Salvage:{len(output['salvage'])} | "
           f"GunVan:{len(output['gunVan'])} | "
-          f"Discounts:{len(output['discounts'])}")
-
+          f"Discounts:{len(output['discounts'])} | "
+          f"MostWanted:{len(output['mostWanted'])} | "
+          f"CarMeet:{len(output['carMeet']['testRides'])} test rides")
 
 if __name__ == "__main__":
     main()
