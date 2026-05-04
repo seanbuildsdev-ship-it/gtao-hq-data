@@ -1,0 +1,88 @@
+{
+  "_updated": "2026-05-04",
+  "weekLabel": "APR 30 – MAY 6",
+  "challenge": {
+    "desc": "Complete \"Old School Hits\" to receive $100,000 (PS5, Xbox Series X/S, PC Enhanced only)",
+    "reward": "$100,000 (PS5, Xbox Series X/S, PC Enhanced only)."
+  },
+  "bonuses": [
+    {
+      "multiplier": 4,
+      "name": "Community Mission Series",
+      "note": "Pays four times the normal rewards on PS5, Xbox Series X/S, "
+    },
+    {
+      "multiplier": 4,
+      "name": "Madrazo Hits",
+      "note": "Pay double money and RP, but GTA+ members get quadruple mone"
+    },
+    {
+      "multiplier": 3,
+      "name": "Payphone Hits",
+      "note": "Franklin's assassination contracts offer exceptional payouts"
+    },
+    {
+      "multiplier": 3,
+      "name": "Time Trials",
+      "note": "Test your driving skills against the clock for increased rew"
+    },
+    {
+      "multiplier": 3,
+      "name": "Open Wheel Races",
+      "note": "These Formula 1-style races require precision driving and pi"
+    },
+    {
+      "multiplier": 2,
+      "name": "Community Race Series",
+      "note": "Pays double money and RP on PS4, Xbox One, and PC Legacy pla"
+    }
+  ],
+  "newVehicles": [],
+  "discounts": [
+    {
+      "pct": 30,
+      "category": "Vehicles",
+      "until": "",
+      "items": []
+    }
+  ],
+  "podium": "Zirconium Journey II",
+  "prizeRide": "Vapid Uranus LozSpeed",
+  "salvage": [],
+  "gunVan": [
+    {
+      "name": "Precision Rifle",
+      "deal": "40% OFF",
+      "gtaPlus": false
+    },
+    {
+      "name": "Combat Shotgun  for",
+      "deal": "30% OFF",
+      "gtaPlus": true
+    }
+  ],
+  "fibFile": "Fine Art File",
+  "mostWanted": [],
+  "carMeet": {
+    "prizeRide": "Vapid Uranus LozSpeed",
+    "prizeReq": "Top 2 in the LS Car Meet Series for four days in a row",
+    "premiumTest": "",
+    "premiumTestNote": "",
+    "testRides": [
+      "Karin S95",
+      "Canis Seminole Frontier",
+      "Dinka Jester"
+    ],
+    "luxuryAutos": [
+      "Annis Minimus (with new Big Minimus Energy livery)",
+      "Karin Woodlander"
+    ],
+    "pdm": [
+      "Declasse DR1 (Open Wheel, 30% off)",
+      "Declasse Tulip",
+      "Pegassi Torero XO",
+      "Progen PR4 (Open Wheel, 30% off)",
+      "Übermacht Sentinel XS4"
+    ]
+  }
+}
